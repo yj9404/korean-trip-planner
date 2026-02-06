@@ -1,0 +1,1 @@
+robots.txt content placeholder - This file will be used for SEO and web crawling directives
