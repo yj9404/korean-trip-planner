@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     # Google Gemini API
     gemini_api_key: str
     
-    # Firebase
+    # Firebase - supports both methods
+    # Method 1: JSON string directly in environment variable (recommended for production)
+    firebase_credentials_json: str | None = None
+    # Method 2: Path to JSON file (for local development)
     firebase_credentials_path: str = "./firebase-credentials.json"
     
     # CORS

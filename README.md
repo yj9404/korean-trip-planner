@@ -101,7 +101,8 @@ firebase deploy
 ### Backend (.env)
 ```
 GEMINI_API_KEY=your_gemini_api_key
-FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json
+FIREBASE_CREDENTIALS_JSON='{"type":"service_account",...}'  # 프로덕션용
+FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json        # 로컬용
 CORS_ORIGINS=http://localhost:3000,https://your-app.web.app
 ```
 
@@ -112,6 +113,11 @@ REACT_APP_FIREBASE_API_KEY=your_firebase_api_key
 REACT_APP_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 REACT_APP_FIREBASE_PROJECT_ID=your-project-id
 ```
+
+**📖 상세 설정 방법**: [ENV_SETUP.md](./ENV_SETUP.md) 참조
+- 로컬 환경 변수 설정 (Windows)
+- GitHub Secrets 설정
+- Firebase Credentials 관리
 
 ## 📱 PWA 기능
 

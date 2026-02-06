@@ -4,6 +4,8 @@ import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from typing import Optional, Dict, List, Any
 from datetime import datetime
+import json
+import os
 
 from app.config import settings
 
@@ -22,7 +24,27 @@ class FirebaseService:
             return
         
         try:
-            cred = credentials.Certificate(settings.firebase_credentials_path)
+            # Try to load from environment variable first (for production/CI/CD)
+            firebase_creds_json = settings.firebase_credentials_json
+            if firebase_creds_json:
+                try:
+                    cred_dict = json.loads(firebase_creds_json)
+                    cred = credentials.Certificate(cred_dict)
+                    print("🔥 Firebase initialized from environment variable")
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ Failed to parse FIREBASE_CREDENTIALS_JSON: {e}")
+                    raise
+            # Fallback to file path (for local development)
+            elif settings.firebase_credentials_path and os.path.exists(settings.firebase_credentials_path):
+                cred = credentials.Certificate(settings.firebase_credentials_path)
+                print(f"🔥 Firebase initialized from file: {settings.firebase_credentials_path}")
+            else:
+                raise ValueError(
+                    "Firebase credentials not found. Please set either:\n"
+                    "- FIREBASE_CREDENTIALS_JSON (JSON string in env var), or\n"
+                    "- FIREBASE_CREDENTIALS_PATH (path to JSON file)"
+                )
+            
             self._app = firebase_admin.initialize_app(cred)
             self._db = firestore.client()
             self.is_initialized = True
