@@ -10,6 +10,9 @@ import DashboardPage from './pages/DashboardPage';
 import TripsPage from './pages/TripsPage';
 import AIGuidePage from './pages/AIGuidePage';
 import TranslatePage from './pages/TranslatePage';
+import ChatPage from './pages/ChatPage';
+import ProfilePage from './pages/ProfilePage';
+import CompleteProfilePage from './pages/CompleteProfilePage';
 
 // Components
 import Layout from './components/Layout';
@@ -86,6 +89,40 @@ function App() {
                             <Layout user={user}>
                                 <TranslatePage user={user} />
                             </Layout>
+                        ) : (
+                            <Navigate to="/login" />
+                        )
+                    }
+                />
+                <Route
+                    path="/chat"
+                    element={
+                        user ? (
+                            <Layout user={user}>
+                                <ChatPage user={user} />
+                            </Layout>
+                        ) : (
+                            <Navigate to="/login" />
+                        )
+                    }
+                />
+                <Route
+                    path="/profile"
+                    element={
+                        user ? (
+                            <Layout user={user}>
+                                <ProfilePage user={user} />
+                            </Layout>
+                        ) : (
+                            <Navigate to="/login" />
+                        )
+                    }
+                />
+                <Route
+                    path="/complete-profile"
+                    element={
+                        user ? (
+                            <CompleteProfilePage user={user} />
                         ) : (
                             <Navigate to="/login" />
                         )

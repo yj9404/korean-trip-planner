@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User preferences: Users can read and write their own preferences
+    match /user_preferences/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Chat rooms: Users can read/write rooms they are participants in
+    match /chat_rooms/{roomId} {
+      allow read: if request.auth != null && 
+                     request.auth.uid in resource.data.participants;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && 
+                       request.auth.uid in resource.data.participants;
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+      }
+    }
+    
+    // Trips: Users can read/write trips they created or are participants in
+    match /trips/{tripId} {
+      allow read: if request.auth != null && 
+                     (request.auth.uid == resource.data.created_by ||
+                      request.auth.uid in resource.data.participants);
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && 
+                               request.auth.uid == resource.data.created_by;
+    }
+    
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -3,6 +3,12 @@
 import google.generativeai as genai
 from typing import Optional, List
 from datetime import datetime
+import logging
+import traceback
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.models.translation import TranslationRequest, TranslationResponse
@@ -121,10 +127,126 @@ Format your response as a numbered list with clear sections."""
         
         response = self.model.generate_content(prompt)
         
-        # For now, return empty list
         # TODO: Parse the response and create structured Recommendation objects
         return []
+    
+    async def translate_message(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str
+    ) -> str:
+        """Translate a chat message quickly"""
+        import asyncio
+        
+        if source_lang == target_lang:
+            return text
+        
+        lang_names = {
+            "ko": "Korean",
+            "en": "English"
+        }
+        
+        source = lang_names.get(source_lang, source_lang)
+        target = lang_names.get(target_lang, target_lang)
+        
+        prompt = f"""Translate this message from {source} to {target}. 
+Only provide the translation, no explanations.
+
+{text}
+
+Translation:"""
+        
+        try:
+            logger.info(f"Translate Request: {text}, {source_lang} -> {target_lang}")
+            
+            # Use synchronous generate_content in a thread to avoid blocking
+            response = await asyncio.to_thread(self.model.generate_content, prompt)
+            
+            if not response:
+                logger.warning("Gemini returned None response")
+                return text
+
+            # Check safety ratings or other reasons if text is blocked
+            if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+                 logger.info(f"Prompt feedback: {response.prompt_feedback}")
+
+            if not response.text:
+                logger.warning(f"Gemini returned empty text. Candidates: {response.candidates}")
+                return text
+
+            raw = response.text.strip()
+            # "Translation:" 접두사 제거 (Gemini가 가끔 접두사 포함해 반환)
+            for prefix in ("Translation:", "Translation :", "translation:", "translation :"):
+                if raw.lower().startswith(prefix.lower()):
+                    raw = raw[len(prefix):].strip()
+                    break
+            if not raw or raw == text:
+                return text
+            logger.info(f"Translation successful: {raw[:50]}...")
+            return raw
+        except Exception as e:
+            logger.error(f"Gemini translation error: {type(e).__name__}: {str(e)}")
+            traceback.print_exc()
+            return text
+    
+    def detect_keywords(self, text: str) -> List[str]:
+        """Detect Korean culture keywords in text"""
+        # Keywords that trigger AI bot explanations
+        korean_keywords = {
+            # Food
+            '김치', 'kimchi', '불고기', 'bulgogi', '삼겹살', 'samgyeopsal',
+            '비빔밥', 'bibimbap', '떡볶이', 'tteokbokki', '치킨', 'korean chicken',
+            '삼계탕', 'samgyetang', '냉면', 'naengmyeon', '갈비', 'galbi',
+            '순대', 'sundae', '호떡', 'hotteok', '붕어빵', 'bungeoppang',
+            
+            # Places
+            '경복궁', 'gyeongbokgung', '남산', 'namsan', '명동', 'myeongdong',
+            '홍대', 'hongdae', '강남', 'gangnam', '인사동', 'insadong',
+            '북촌', 'bukchon', '이태원', 'itaewon', '동대문', 'dongdaemun',
+            
+            # Culture
+            '한복', 'hanbok', '사물놀이', 'samulnori', 'k-pop', 'kpop',
+            '노래방', 'noraebang', 'karaoke', 'pc방', 'pc bang',
+            '찜질방', 'jjimjilbang', '한옥', 'hanok'
+        }
+        
+        text_lower = text.lower()
+        found_keywords = []
+        
+        for keyword in korean_keywords:
+            if keyword in text_lower:
+                found_keywords.append(keyword)
+        
+        return found_keywords
+    
+    async def generate_explanation(
+        self,
+        keyword: str,
+        context: str,
+        language: str = "en"
+    ) -> str:
+        """Generate AI explanation for a keyword"""
+        lang_instruction = "Respond in Korean." if language == "ko" else "Respond in English."
+        
+        prompt = f"""{lang_instruction}
+
+A user mentioned "{keyword}" in a chat about Korea travel.
+
+Context: {context}
+
+Provide a brief, friendly explanation about "{keyword}" (2-3 sentences max).
+Focus on:
+1. What it is
+2. Why it's popular or interesting
+3. A quick tip for trying/visiting it
+
+Keep it conversational and helpful."""
+        
+        response = self.model.generate_content(prompt)
+        return response.text.strip()
 
 
 # Global Gemini service instance
 gemini_service = GeminiService()
+

@@ -1,8 +1,11 @@
-"""Data models for the application"""
+"""Data models package"""
 
-from .trip import Trip, TripCreate, TripUpdate
-from .translation import TranslationRequest, TranslationResponse
-from .ai_guide import AIGuideRequest, AIGuideResponse
+from app.models.trip import Trip, TripCreate, TripUpdate
+from app.models.translation import TranslationRequest, TranslationResponse
+from app.models.ai_guide import AIGuideRequest, AIGuideResponse
+from app.models.chat_room import ChatRoom, ChatRoomCreate, ChatRoomResponse
+from app.models.chat_message import ChatMessage, ChatMessageCreate, ChatMessageResponse
+from app.models.user_preferences import UserPreferences, UserPreferencesUpdate, UserPreferencesResponse
 
 __all__ = [
     "Trip",
@@ -12,4 +15,13 @@ __all__ = [
     "TranslationResponse",
     "AIGuideRequest",
     "AIGuideResponse",
+    "ChatRoom",
+    "ChatRoomCreate",
+    "ChatRoomResponse",
+    "ChatMessage",
+    "ChatMessageCreate",
+    "ChatMessageResponse",
+    "UserPreferences",
+    "UserPreferencesUpdate",
+    "UserPreferencesResponse",
 ]

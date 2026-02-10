@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import {
     FiHome,
     FiMap,
     FiCompass,
     FiGlobe,
+    FiMessageSquare,
+    FiUser,
     FiMenu,
     FiX,
     FiLogOut
@@ -16,6 +19,35 @@ const Layout = ({ children, user }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
+
+    // Check for incomplete profile
+    useEffect(() => {
+        const checkProfile = async () => {
+            if (!user) return;
+
+            // Skip check if we are already on the complete profile page (though Layout isn't used there)
+            if (location.pathname === '/complete-profile') return;
+
+            try {
+                const prefsDoc = await getDoc(doc(db, 'user_preferences', user.uid));
+                if (prefsDoc.exists()) {
+                    const data = prefsDoc.data();
+                    if (!data.english_name) {
+                        console.log('⚠️ Incomplete profile detected in Layout, redirecting...');
+                        navigate('/complete-profile');
+                    }
+                } else {
+                    // No preferences doc -> Redirect
+                    console.log('⚠️ No profile detected in Layout, redirecting...');
+                    navigate('/complete-profile');
+                }
+            } catch (error) {
+                console.error('Error checking profile in Layout:', error);
+            }
+        };
+
+        checkProfile();
+    }, [user, navigate, location.pathname]);
 
     const handleLogout = async () => {
         try {
@@ -29,8 +61,10 @@ const Layout = ({ children, user }) => {
     const navItems = [
         { path: '/dashboard', label: 'Dashboard', icon: FiHome },
         { path: '/trips', label: 'My Trips', icon: FiMap },
+        { path: '/chat', label: 'Chat', icon: FiMessageSquare },
         { path: '/ai-guide', label: 'AI Guide', icon: FiCompass },
         { path: '/translate', label: 'Translate', icon: FiGlobe },
+        { path: '/profile', label: 'Profile', icon: FiUser },
     ];
 
     return (
@@ -59,8 +93,8 @@ const Layout = ({ children, user }) => {
                                         key={item.path}
                                         to={item.path}
                                         className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${isActive
-                                                ? 'bg-primary-50 text-primary-700 font-medium'
-                                                : 'text-gray-600 hover:bg-gray-100'
+                                            ? 'bg-primary-50 text-primary-700 font-medium'
+                                            : 'text-gray-600 hover:bg-gray-100'
                                             }`}
                                     >
                                         <Icon className="text-xl" />
@@ -112,8 +146,8 @@ const Layout = ({ children, user }) => {
                                         to={item.path}
                                         onClick={() => setMobileMenuOpen(false)}
                                         className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                                                ? 'bg-primary-50 text-primary-700 font-medium'
-                                                : 'text-gray-600 hover:bg-gray-100'
+                                            ? 'bg-primary-50 text-primary-700 font-medium'
+                                            : 'text-gray-600 hover:bg-gray-100'
                                             }`}
                                     >
                                         <Icon className="text-xl" />

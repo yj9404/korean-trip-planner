@@ -124,7 +124,92 @@ class FirebaseService:
         except Exception as e:
             print(f"Token verification error: {e}")
             return None
+    
+    # Chat room operations
+    async def create_chat_room(self, room_data: Dict[str, Any]) -> str:
+        """Create a new chat room in Firestore"""
+        room_data["created_at"] = datetime.utcnow()
+        room_data["updated_at"] = datetime.utcnow()
+        
+        doc_ref = self.db.collection("chat_rooms").document()
+        doc_ref.set(room_data)
+        return doc_ref.id
+    
+    async def get_chat_room(self, room_id: str) -> Optional[Dict[str, Any]]:
+        """Get a chat room by ID"""
+        doc = self.db.collection("chat_rooms").document(room_id).get()
+        if doc.exists:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            return data
+        return None
+    
+    async def get_user_chat_rooms(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all chat rooms for a user"""
+        rooms = []
+        docs = self.db.collection("chat_rooms").where("participants", "array_contains", user_id).stream()
+        
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            rooms.append(data)
+        
+        return rooms
+    
+    # Chat message operations
+    async def send_message(self, room_id: str, message_data: Dict[str, Any]) -> str:
+        """Send a message to a chat room"""
+        message_data["timestamp"] = datetime.utcnow()
+        
+        doc_ref = self.db.collection("chat_rooms").document(room_id).collection("messages").document()
+        doc_ref.set(message_data)
+        
+        # Update room's updated_at timestamp
+        self.db.collection("chat_rooms").document(room_id).update({
+            "updated_at": datetime.utcnow()
+        })
+        
+        return doc_ref.id
+    
+    async def get_messages(self, room_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get messages from a chat room"""
+        messages = []
+        docs = (
+            self.db.collection("chat_rooms")
+            .document(room_id)
+            .collection("messages")
+            .order_by("timestamp", direction=firestore.Query.ASCENDING)
+            .limit(limit)
+            .stream()
+        )
+        
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            messages.append(data)
+        
+        return messages
+    
+    # User preferences operations
+    async def get_user_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user preferences"""
+        doc = self.db.collection("user_preferences").document(user_id).get()
+        if doc.exists:
+            return doc.to_dict()
+        # Return default preferences if not found
+        return {
+            "user_id": user_id,
+            "preferred_lang": "en",
+            "ai_bot_enabled": True
+        }
+    
+    async def update_user_preferences(self, user_id: str, preferences: Dict[str, Any]) -> bool:
+        """Update user preferences"""
+        doc_ref = self.db.collection("user_preferences").document(user_id)
+        doc_ref.set(preferences, merge=True)
+        return True
 
 
 # Global Firebase service instance
 firebase_service = FirebaseService()
+

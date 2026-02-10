@@ -4,19 +4,42 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signInWithPopup,
-    GoogleAuthProvider
+    GoogleAuthProvider,
+    updateProfile
 } from 'firebase/auth';
-import { auth } from '../services/firebase';
-import { FiMail, FiLock, FiMap } from 'react-icons/fi';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
+import { FiMail, FiLock, FiMap, FiUser, FiX } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 
 const LoginPage = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [koreanName, setKoreanName] = useState('');
+    const [englishName, setEnglishName] = useState('');
+    const [preferredLang, setPreferredLang] = useState('en');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showProfileSetup, setShowProfileSetup] = useState(false);
+    const [googleUser, setGoogleUser] = useState(null);
     const navigate = useNavigate();
+
+    const saveUserPreferences = async (userId, displayName, korean, english, lang) => {
+        try {
+            await setDoc(doc(db, 'user_preferences', userId), {
+                user_id: userId,
+                korean_name: korean,
+                english_name: english,
+                preferred_lang: lang,
+                ai_bot_enabled: true,
+                display_name: displayName
+            });
+        } catch (err) {
+            console.error('Error saving user preferences:', err);
+            throw err;
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -26,10 +49,27 @@ const LoginPage = () => {
         try {
             if (isLogin) {
                 await signInWithEmailAndPassword(auth, email, password);
+                navigate('/dashboard');
             } else {
-                await createUserWithEmailAndPassword(auth, email, password);
+                // Validate signup fields
+                if (!englishName.trim()) {
+                    setError('Please enter your English name');
+                    setLoading(false);
+                    return;
+                }
+
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Always use English name for display name
+                const displayName = englishName;
+                await updateProfile(user, { displayName });
+
+                // Save preferences to Firestore
+                await saveUserPreferences(user.uid, displayName, koreanName, englishName, preferredLang);
+
+                navigate('/dashboard');
             }
-            navigate('/dashboard');
         } catch (err) {
             setError(err.message);
         } finally {
@@ -43,7 +83,64 @@ const LoginPage = () => {
 
         try {
             const provider = new GoogleAuthProvider();
-            await signInWithPopup(auth, provider);
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            // Check if user already has preferences
+            const prefsDoc = await getDoc(doc(db, 'user_preferences', user.uid));
+
+            if (prefsDoc.exists()) {
+                const data = prefsDoc.data();
+
+                // Check if mandatory fields are present (English name is mandatory)
+                if (data.english_name) {
+                    // Existing user with complete profile -> Dashboard
+                    navigate('/dashboard');
+                } else {
+                    // Existing user but incomplete profile -> Profile Setup
+                    // Pre-fill existing data if available
+                    if (data.korean_name) setKoreanName(data.korean_name);
+                    if (data.english_name) setEnglishName(data.english_name);
+                    if (data.preferred_lang) setPreferredLang(data.preferred_lang);
+
+                    setGoogleUser(user);
+                    setShowProfileSetup(true);
+                    setLoading(false);
+                }
+            } else {
+                // New user -> Profile Setup
+                setGoogleUser(user);
+                setShowProfileSetup(true);
+                setLoading(false);
+            }
+        } catch (err) {
+            // Handle popup closed or other errors
+            if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+                // User closed the popup, just reset loading state
+                setLoading(false);
+            } else {
+                setError(err.message);
+                setLoading(false);
+            }
+        }
+    };
+
+    const handleProfileSetupSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+
+        try {
+            if (!englishName.trim()) {
+                setError('Please enter your English name');
+                setLoading(false);
+                return;
+            }
+
+            const displayName = englishName;
+            await updateProfile(googleUser, { displayName });
+            await saveUserPreferences(googleUser.uid, displayName, koreanName, englishName, preferredLang);
+
             navigate('/dashboard');
         } catch (err) {
             setError(err.message);
@@ -51,6 +148,125 @@ const LoginPage = () => {
             setLoading(false);
         }
     };
+
+    const handleCancelProfileSetup = async () => {
+        // Sign out the user if they cancel profile setup
+        await auth.signOut();
+        setShowProfileSetup(false);
+        setGoogleUser(null);
+        setKoreanName('');
+        setEnglishName('');
+        setPreferredLang('en');
+    };
+
+    // Profile Setup Modal for Google Users
+    if (showProfileSetup) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-purple-50 flex items-center justify-center p-4">
+                <div className="w-full max-w-md">
+                    <div className="text-center mb-8">
+                        <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-2xl">
+                            <FiUser className="text-white text-4xl" />
+                        </div>
+                        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">
+                            Complete Your Profile
+                        </h1>
+                        <p className="text-gray-600 mt-2">
+                            Welcome, {googleUser?.email}! Tell us a bit more about yourself.
+                        </p>
+                    </div>
+
+                    <div className="card animate-slide-up relative">
+                        <div className="card-body">
+                            <button
+                                onClick={handleCancelProfileSetup}
+                                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                            >
+                                <FiX className="text-xl" />
+                            </button>
+
+                            {error && (
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                                    {error}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleProfileSetupSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Korean Name (한국어 이름) <span className="text-gray-400 text-xs font-normal">(Optional)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <FiUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={koreanName}
+                                            onChange={(e) => setKoreanName(e.target.value)}
+                                            className="input pl-10"
+                                            placeholder="홍길동"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        English Name *
+                                    </label>
+                                    <div className="relative">
+                                        <FiUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={englishName}
+                                            onChange={(e) => setEnglishName(e.target.value)}
+                                            className="input pl-10"
+                                            placeholder="John Doe"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Preferred Language *
+                                    </label>
+                                    <div className="flex space-x-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreferredLang('ko')}
+                                            className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${preferredLang === 'ko'
+                                                ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium'
+                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            🇰🇷 한국어
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreferredLang('en')}
+                                            className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${preferredLang === 'en'
+                                                ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium'
+                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            🇺🇸 English
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="btn-primary w-full"
+                                >
+                                    {loading ? 'Saving...' : 'Complete Setup'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -75,8 +291,8 @@ const LoginPage = () => {
                             <button
                                 onClick={() => setIsLogin(true)}
                                 className={`flex-1 py-2 rounded-md transition-all ${isLogin
-                                        ? 'bg-white shadow-md text-primary-600 font-medium'
-                                        : 'text-gray-600'
+                                    ? 'bg-white shadow-md text-primary-600 font-medium'
+                                    : 'text-gray-600'
                                     }`}
                             >
                                 Login
@@ -84,8 +300,8 @@ const LoginPage = () => {
                             <button
                                 onClick={() => setIsLogin(false)}
                                 className={`flex-1 py-2 rounded-md transition-all ${!isLogin
-                                        ? 'bg-white shadow-md text-primary-600 font-medium'
-                                        : 'text-gray-600'
+                                    ? 'bg-white shadow-md text-primary-600 font-medium'
+                                    : 'text-gray-600'
                                     }`}
                             >
                                 Sign Up
@@ -99,6 +315,72 @@ const LoginPage = () => {
                         )}
 
                         <form onSubmit={handleSubmit} className="space-y-4">
+                            {/* Sign Up Only Fields */}
+                            {!isLogin && (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Korean Name (한국어 이름) <span className="text-gray-400 text-xs font-normal">(Optional)</span>
+                                        </label>
+                                        <div className="relative">
+                                            <FiUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                            <input
+                                                type="text"
+                                                value={koreanName}
+                                                onChange={(e) => setKoreanName(e.target.value)}
+                                                className="input pl-10"
+                                                placeholder="홍길동"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            English Name *
+                                        </label>
+                                        <div className="relative">
+                                            <FiUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                            <input
+                                                type="text"
+                                                value={englishName}
+                                                onChange={(e) => setEnglishName(e.target.value)}
+                                                className="input pl-10"
+                                                placeholder="John Doe"
+                                                required={!isLogin}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Preferred Language *
+                                        </label>
+                                        <div className="flex space-x-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreferredLang('ko')}
+                                                className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${preferredLang === 'ko'
+                                                    ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium'
+                                                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                                    }`}
+                                            >
+                                                🇰🇷 한국어
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreferredLang('en')}
+                                                className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${preferredLang === 'en'
+                                                    ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium'
+                                                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                                    }`}
+                                            >
+                                                🇺🇸 English
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Email
@@ -154,7 +436,7 @@ const LoginPage = () => {
                         <button
                             onClick={handleGoogleSignIn}
                             disabled={loading}
-                            className="w-full flex items-center justify-center space-x-2 px-4 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            className="w-full flex items-center justify-center space-x-2 px-4 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <FcGoogle className="text-2xl" />
                             <span className="font-medium text-gray-700">Google</span>

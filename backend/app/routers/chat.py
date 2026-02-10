@@ -1,0 +1,166 @@
+"""Chat router for real-time messaging with AI translation"""
+
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
+from app.models.chat_room import ChatRoomCreate, ChatRoomResponse
+from app.models.chat_message import ChatMessageCreate, ChatMessageResponse
+from app.models.user_preferences import UserPreferencesUpdate, UserPreferencesResponse
+from app.services.firebase_service import firebase_service
+from app.services.gemini_service import gemini_service
+
+router = APIRouter()
+
+
+# Chat Room Endpoints
+@router.post("/chat/rooms", response_model=ChatRoomResponse)
+async def create_chat_room(room_data: ChatRoomCreate):
+    """Create a new chat room"""
+    try:
+        room_dict = room_data.model_dump()
+        room_id = await firebase_service.create_chat_room(room_dict)
+        
+        created_room = await firebase_service.get_chat_room(room_id)
+        if not created_room:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created room")
+        
+        return ChatRoomResponse(**created_room)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create chat room: {str(e)}")
+
+
+@router.get("/chat/rooms/{room_id}", response_model=ChatRoomResponse)
+async def get_chat_room(room_id: str):
+    """Get chat room information"""
+    room = await firebase_service.get_chat_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Chat room not found")
+    
+    return ChatRoomResponse(**room)
+
+
+@router.get("/chat/rooms/user/{user_id}", response_model=List[ChatRoomResponse])
+async def get_user_chat_rooms(user_id: str):
+    """Get all chat rooms for a user"""
+    try:
+        rooms = await firebase_service.get_user_chat_rooms(user_id)
+        return [ChatRoomResponse(**room) for room in rooms]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chat rooms: {str(e)}")
+
+
+# Chat Message Endpoints
+@router.get("/chat/rooms/{room_id}/messages", response_model=List[ChatMessageResponse])
+async def get_messages(room_id: str, limit: int = 50):
+    """Get messages from a chat room"""
+    # Verify room exists
+    room = await firebase_service.get_chat_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Chat room not found")
+    
+    try:
+        messages = await firebase_service.get_messages(room_id, limit)
+        return [ChatMessageResponse(**msg) for msg in messages]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
+
+
+@router.post("/chat/rooms/{room_id}/messages", response_model=ChatMessageResponse)
+async def send_message(room_id: str, message_data: ChatMessageCreate):
+    """Send a message to a chat room (with AI bot logic)"""
+    # Verify room exists
+    room = await firebase_service.get_chat_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Chat room not found")
+    
+    try:
+        # Send the user message
+        message_dict = message_data.model_dump()
+        message_dict["room_id"] = room_id
+        message_dict["is_ai_bot"] = False
+        
+        message_id = await firebase_service.send_message(room_id, message_dict)
+        message_dict["id"] = message_id
+        message_dict["timestamp"] = datetime.utcnow()
+        
+        # Check for keywords and trigger AI bot if enabled
+        keywords = gemini_service.detect_keywords(message_data.text)
+        
+        if keywords:
+            # Get user preferences to check if AI bot is enabled
+            user_prefs = await firebase_service.get_user_preferences(message_data.sender_id)
+            
+            if user_prefs.get("ai_bot_enabled", True):
+                # Generate AI explanation for the first detected keyword
+                keyword = keywords[0]
+                explanation = await gemini_service.generate_explanation(
+                    keyword=keyword,
+                    context=message_data.text,
+                    language=message_data.original_lang
+                )
+                
+                # Send AI bot message
+                ai_message = {
+                    "room_id": room_id,
+                    "sender_id": "ai_bot",
+                    "sender_name": "AI Travel Guide",
+                    "text": f"💡 About '{keyword}': {explanation}",
+                    "original_lang": message_data.original_lang,
+                    "is_ai_bot": True
+                }
+                
+                await firebase_service.send_message(room_id, ai_message)
+        
+        return ChatMessageResponse(**message_dict)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
+
+
+# Translation Endpoint
+class TranslateRequest(BaseModel):
+    text: str
+    source_lang: str
+    target_lang: str
+
+
+@router.post("/chat/translate")
+async def translate_message(request: TranslateRequest):
+    """Translate a message"""
+    try:
+        translated = await gemini_service.translate_message(request.text, request.source_lang, request.target_lang)
+        return {
+            "original": request.text,
+            "translated": translated,
+            "source_lang": request.source_lang,
+            "target_lang": request.target_lang
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
+
+
+# User Preferences Endpoints
+@router.get("/chat/preferences/{user_id}", response_model=UserPreferencesResponse)
+async def get_user_preferences(user_id: str):
+    """Get user chat preferences"""
+    try:
+        prefs = await firebase_service.get_user_preferences(user_id)
+        return UserPreferencesResponse(**prefs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get preferences: {str(e)}")
+
+
+@router.put("/chat/preferences/{user_id}", response_model=UserPreferencesResponse)
+async def update_user_preferences(user_id: str, preferences: UserPreferencesUpdate):
+    """Update user chat preferences"""
+    try:
+        prefs_dict = preferences.model_dump(exclude_none=True)
+        prefs_dict["user_id"] = user_id
+        
+        await firebase_service.update_user_preferences(user_id, prefs_dict)
+        
+        updated_prefs = await firebase_service.get_user_preferences(user_id)
+        return UserPreferencesResponse(**updated_prefs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update preferences: {str(e)}")

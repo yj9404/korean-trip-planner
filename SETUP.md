@@ -26,12 +26,21 @@
 ```powershell
 cd backend
 python -m venv venv
-.\venv\Scripts\activate
+```
+
+**Windows PowerShell 활성화 문제 해결:**
+```powershell
+# 활성화 스크립트가 차단되는 경우, venv의 Python을 직접 사용하세요:
+.\venv\Scripts\python.exe -m pip install --upgrade pip
 ```
 
 ### 2. 패키지 설치
 
 ```powershell
+# Windows에서 권장하는 방법:
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# 또는 venv가 활성화된 경우:
 pip install -r requirements.txt
 ```
 
@@ -67,10 +76,13 @@ Firebase Console에서 다운로드한 서비스 계정 키를 `backend/firebase
 ### 5. Backend 실행
 
 ```powershell
-# 개발 모드
+# Windows 권장 방법 (venv 활성화 없이):
+.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# 또는 venv가 활성화된 경우:
 uvicorn app.main:app --reload
 
-# 또는
+# 또는:
 python -m app.main
 ```
 
