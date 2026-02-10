@@ -19,13 +19,17 @@ class GeminiService:
     """Service for Google Gemini AI operations"""
     
     def __init__(self):
-        self.model: Optional[genai.GenerativeModel] = None
+        self.model_flash_lite: Optional[genai.GenerativeModel] = None
+        self.model_lite: Optional[genai.GenerativeModel] = None
         self._configure()
     
     def _configure(self):
         """Configure Gemini API"""
         genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        # Use Gemini 2.5 Flash Lite for translation (fast)
+        self.model_flash_lite = genai.GenerativeModel('gemini-2.5-flash-lite')
+        # Use Gemini 2.5 Flash for AI guide/explanations (smart)
+        self.model_lite = genai.GenerativeModel('gemini-2.5-flash')
     
     async def translate(self, request: TranslationRequest) -> TranslationResponse:
         """Translate text using Gemini"""
@@ -51,7 +55,7 @@ Text to translate:
 
 Translation:"""
         
-        response = self.model.generate_content(prompt)
+        response = self.model_flash_lite.generate_content(prompt)
         translated_text = response.text.strip()
         
         return TranslationResponse(
@@ -64,7 +68,8 @@ Translation:"""
     async def get_travel_guide(self, request: AIGuideRequest) -> AIGuideResponse:
         """Get AI-powered travel guide recommendations"""
         
-        lang_instruction = "Respond in Korean." if request.language == "ko" else "Respond in English."
+        # Always respond in English for international family trip context
+        lang_instruction = "Respond in English."
         
         location_context = f" focusing on {request.location}" if request.location else ""
         dates_context = ""
@@ -89,7 +94,7 @@ Provide a helpful, detailed response that includes:
 
 Keep the tone warm, informative, and encouraging."""
         
-        response = self.model.generate_content(prompt)
+        response = self.model_lite.generate_content(prompt)
         guide_text = response.text.strip()
         
         # For now, return a simple response
@@ -110,7 +115,8 @@ Keep the tone warm, informative, and encouraging."""
     ) -> List[Recommendation]:
         """Get specific recommendations for a category and location"""
         
-        lang_instruction = "Respond in Korean." if language == "ko" else "Respond in English."
+        # Always respond in English
+        lang_instruction = "Respond in English."
         
         prompt = f"""{lang_instruction}
 
@@ -125,7 +131,7 @@ For each recommendation, provide:
 
 Format your response as a numbered list with clear sections."""
         
-        response = self.model.generate_content(prompt)
+        response = self.model_lite.generate_content(prompt)
         
         # TODO: Parse the response and create structured Recommendation objects
         return []
@@ -160,30 +166,27 @@ Translation:"""
         try:
             logger.info(f"Translate Request: {text}, {source_lang} -> {target_lang}")
             
-            # Use synchronous generate_content in a thread to avoid blocking
-            response = await asyncio.to_thread(self.model.generate_content, prompt)
+            if not self.model_flash_lite:
+                self._configure()
+            
+            response = await self.model_flash_lite.generate_content_async(prompt)
             
             if not response:
                 logger.warning("Gemini returned None response")
                 return text
-
-            # Check safety ratings or other reasons if text is blocked
-            if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
-                 logger.info(f"Prompt feedback: {response.prompt_feedback}")
 
             if not response.text:
                 logger.warning(f"Gemini returned empty text. Candidates: {response.candidates}")
                 return text
 
             raw = response.text.strip()
-            # "Translation:" 접두사 제거 (Gemini가 가끔 접두사 포함해 반환)
-            for prefix in ("Translation:", "Translation :", "translation:", "translation :"):
+            # "Translation:" prefix removal
+            for prefix in ("Translation:", "Translation :", "translation:", "translation :"): 
                 if raw.lower().startswith(prefix.lower()):
                     raw = raw[len(prefix):].strip()
                     break
-            if not raw or raw == text:
-                return text
-            logger.info(f"Translation successful: {raw[:50]}...")
+            
+            logger.info(f"Translation successful: '{raw[:50]}...'")
             return raw
         except Exception as e:
             logger.error(f"Gemini translation error: {type(e).__name__}: {str(e)}")
@@ -227,7 +230,8 @@ Translation:"""
         language: str = "en"
     ) -> str:
         """Generate AI explanation for a keyword"""
-        lang_instruction = "Respond in Korean." if language == "ko" else "Respond in English."
+        # Always respond in English
+        lang_instruction = "Respond in English."
         
         prompt = f"""{lang_instruction}
 
@@ -243,7 +247,7 @@ Focus on:
 
 Keep it conversational and helpful."""
         
-        response = self.model.generate_content(prompt)
+        response = self.model_lite.generate_content(prompt)
         return response.text.strip()
 
 

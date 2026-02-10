@@ -4,12 +4,16 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+import logging
+import traceback
 
 from app.models.chat_room import ChatRoomCreate, ChatRoomResponse
 from app.models.chat_message import ChatMessageCreate, ChatMessageResponse
 from app.models.user_preferences import UserPreferencesUpdate, UserPreferencesResponse
 from app.services.firebase_service import firebase_service
 from app.services.gemini_service import gemini_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -128,8 +132,10 @@ class TranslateRequest(BaseModel):
 @router.post("/chat/translate")
 async def translate_message(request: TranslateRequest):
     """Translate a message"""
+    logger.info(f"[TRANSLATE API] Received request: text='{request.text[:50]}...', source={request.source_lang}, target={request.target_lang}")
     try:
         translated = await gemini_service.translate_message(request.text, request.source_lang, request.target_lang)
+        logger.info(f"[TRANSLATE API] Translation successful: '{translated[:50]}...'")
         return {
             "original": request.text,
             "translated": translated,
@@ -137,6 +143,8 @@ async def translate_message(request: TranslateRequest):
             "target_lang": request.target_lang
         }
     except Exception as e:
+        logger.error(f"[TRANSLATE API] Translation failed: {type(e).__name__}: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
 
 

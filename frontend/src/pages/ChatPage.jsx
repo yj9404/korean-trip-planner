@@ -101,8 +101,8 @@ const ChatPage = ({ user }) => {
                         preferences.preferred_lang
                     );
                     const translated = result?.translated?.trim();
-                    // 번역 결과가 없거나 원문과 같으면 저장하지 않음 (원문 그대로 나오는 현상 방지)
-                    if (translated && translated !== msg.text) {
+
+                    if (translated) {
                         updates[msg.id] = translated;
                     }
                 } catch (error) {
@@ -117,7 +117,7 @@ const ChatPage = ({ user }) => {
         if (messages.length > 0) {
             translateMessages();
         }
-    }, [messages, preferences.preferred_lang, translations]);
+    }, [messages, preferences.preferred_lang]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
