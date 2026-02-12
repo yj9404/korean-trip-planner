@@ -46,10 +46,18 @@ const ChatPage = ({ user }) => {
         const loadChatRooms = async () => {
             setLoading(true);
             try {
-                const userRooms = await getUserChatRooms(user.uid);
+                // Add explicit timeout to fetch
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Request timed out')), 10000)
+                );
+
+                const userRooms = await Promise.race([
+                    getUserChatRooms(user.uid),
+                    timeoutPromise
+                ]);
+
                 setRooms(userRooms);
 
-                // If no rooms exist, create a default one
                 if (userRooms.length === 0) {
                     const newRoom = await createChatRoom('default-trip', [user.uid]);
                     setRooms([newRoom]);
@@ -59,6 +67,7 @@ const ChatPage = ({ user }) => {
                 }
             } catch (error) {
                 console.error('Error loading chat rooms:', error);
+                alert('Failed to load chat. Please refresh the page.');
             } finally {
                 setLoading(false);
             }

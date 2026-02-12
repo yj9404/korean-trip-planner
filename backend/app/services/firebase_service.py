@@ -208,6 +208,44 @@ class FirebaseService:
         doc_ref = self.db.collection("user_preferences").document(user_id)
         doc_ref.set(preferences, merge=True)
         return True
+    
+    
+    # Itinerary / Place operations (user-based, no trip context)
+    def add_place(self, user_id: str, place_data: Dict[str, Any]) -> str:
+        """Add a place to user's itinerary"""
+        place_data["user_id"] = user_id
+        place_data["created_at"] = datetime.utcnow()
+        place_data["updated_at"] = datetime.utcnow()
+        doc_ref = self.db.collection("places").document(user_id).collection("items").document()
+        doc_ref.set(place_data)
+        return doc_ref.id
+    
+    def get_user_places(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all places for a user, ordered by date and index"""
+        places = []
+        docs = (
+            self.db.collection("places").document(user_id).collection("items")
+            .order_by("visit_date").stream()
+        )
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            places.append(data)
+        return places
+    
+    def update_place(self, user_id: str, place_id: str, place_data: Dict[str, Any]) -> bool:
+        """Update a place in user's itinerary"""
+        place_data["updated_at"] = datetime.utcnow()
+        doc_ref = self.db.collection("places").document(user_id).collection("items").document(place_id)
+        doc_ref.update(place_data)
+        return True
+    
+    def delete_place(self, user_id: str, place_id: str) -> bool:
+        """Delete a place from user's itinerary"""
+        self.db.collection("places").document(user_id).collection("items").document(place_id).delete()
+        return True
+
+
 
 
 # Global Firebase service instance

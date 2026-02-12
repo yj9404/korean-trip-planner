@@ -11,6 +11,7 @@ import TripsPage from './pages/TripsPage';
 import AIGuidePage from './pages/AIGuidePage';
 import TranslatePage from './pages/TranslatePage';
 import ChatPage from './pages/ChatPage';
+import ItineraryPage from './pages/ItineraryPage';
 import ProfilePage from './pages/ProfilePage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
 
@@ -58,6 +59,7 @@ function App() {
                         )
                     }
                 />
+                {/* Removed - Single trip architecture
                 <Route
                     path="/trips"
                     element={
@@ -70,6 +72,7 @@ function App() {
                         )
                     }
                 />
+                */}
                 <Route
                     path="/ai-guide"
                     element={
@@ -100,6 +103,18 @@ function App() {
                         user ? (
                             <Layout user={user}>
                                 <ChatPage user={user} />
+                            </Layout>
+                        ) : (
+                            <Navigate to="/login" />
+                        )
+                    }
+                />
+                <Route
+                    path="/itinerary"
+                    element={
+                        user ? (
+                            <Layout user={user} fullWidth={true}>
+                                <ItineraryPage user={user} />
                             </Layout>
                         ) : (
                             <Navigate to="/login" />

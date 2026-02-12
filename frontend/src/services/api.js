@@ -58,36 +58,6 @@ export const apiService = {
         return response.data;
     },
 
-    // Trips
-    createTrip: async (tripData) => {
-        const response = await api.post('/trips', tripData);
-        return response.data;
-    },
-
-    getTrip: async (tripId) => {
-        const response = await api.get(`/trips/${tripId}`);
-        return response.data;
-    },
-
-    updateTrip: async (tripId, tripData) => {
-        const response = await api.put(`/trips/${tripId}`, tripData);
-        return response.data;
-    },
-
-    deleteTrip: async (tripId) => {
-        const response = await api.delete(`/trips/${tripId}`);
-        return response.data;
-    },
-
-    getUserTrips: async () => {
-        const response = await api.get('/trips');
-        return response.data;
-    },
-
-    getParticipantTrips: async () => {
-        const response = await api.get('/trips/participant/me');
-        return response.data;
-    },
 };
 
 export default api;

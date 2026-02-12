@@ -9,8 +9,7 @@ class TripBase(BaseModel):
     """Base trip model"""
     title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
-    start_date: datetime
-    end_date: datetime
+    date: datetime  # Single date instead of start/end
     destinations: List[str] = Field(default_factory=list)
     participants: List[str] = Field(default_factory=list)  # User IDs
     
@@ -24,8 +23,7 @@ class TripUpdate(BaseModel):
     """Model for updating a trip"""
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    date: Optional[datetime] = None
     destinations: Optional[List[str]] = None
     participants: Optional[List[str]] = None
 

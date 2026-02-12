@@ -15,7 +15,7 @@ import {
     FiLogOut
 } from 'react-icons/fi';
 
-const Layout = ({ children, user }) => {
+const Layout = ({ children, user, fullWidth = false }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
@@ -60,7 +60,7 @@ const Layout = ({ children, user }) => {
 
     const navItems = [
         { path: '/dashboard', label: 'Dashboard', icon: FiHome },
-        { path: '/trips', label: 'My Trips', icon: FiMap },
+        { path: '/itinerary', label: 'Itinerary', icon: FiMap },
         { path: '/chat', label: 'Chat', icon: FiMessageSquare },
         { path: '/ai-guide', label: 'AI Guide', icon: FiCompass },
         { path: '/translate', label: 'Translate', icon: FiGlobe },
@@ -168,7 +168,7 @@ const Layout = ({ children, user }) => {
             </header>
 
             {/* Main Content */}
-            <main className="container-app py-8">
+            <main className={fullWidth ? "min-h-[calc(100vh-64px)]" : "container-app py-8"}>
                 {children}
             </main>
 

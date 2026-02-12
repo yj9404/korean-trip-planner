@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 from app.config import settings
 from app.models.translation import TranslationRequest, TranslationResponse
 from app.models.ai_guide import AIGuideRequest, AIGuideResponse, Recommendation
+import json
 
 
 class GeminiService:
@@ -20,7 +21,7 @@ class GeminiService:
     
     def __init__(self):
         self.model_flash_lite: Optional[genai.GenerativeModel] = None
-        self.model_lite: Optional[genai.GenerativeModel] = None
+        self.model_flash: Optional[genai.GenerativeModel] = None
         self._configure()
     
     def _configure(self):
@@ -29,7 +30,7 @@ class GeminiService:
         # Use Gemini 2.5 Flash Lite for translation (fast)
         self.model_flash_lite = genai.GenerativeModel('gemini-2.5-flash-lite')
         # Use Gemini 2.5 Flash for AI guide/explanations (smart)
-        self.model_lite = genai.GenerativeModel('gemini-2.5-flash')
+        self.model_flash = genai.GenerativeModel('gemini-2.5-flash')
     
     async def translate(self, request: TranslationRequest) -> TranslationResponse:
         """Translate text using Gemini"""
@@ -94,7 +95,7 @@ Provide a helpful, detailed response that includes:
 
 Keep the tone warm, informative, and encouraging."""
         
-        response = self.model_lite.generate_content(prompt)
+        response = self.model_flash.generate_content(prompt)
         guide_text = response.text.strip()
         
         # For now, return a simple response
@@ -131,7 +132,7 @@ For each recommendation, provide:
 
 Format your response as a numbered list with clear sections."""
         
-        response = self.model_lite.generate_content(prompt)
+        response = self.model_flash.generate_content(prompt)
         
         # TODO: Parse the response and create structured Recommendation objects
         return []
@@ -247,10 +248,107 @@ Focus on:
 
 Keep it conversational and helpful."""
         
-        response = self.model_lite.generate_content(prompt)
+        response = self.model_flash.generate_content(prompt)
         return response.text.strip()
+
+
+    async def translate_to_korean(self, text: str) -> str:
+        """Translate English search term to Korean for Naver Map Search"""
+        
+        prompt = f"""Translate the following location search query into Korean for Naver Maps search.
+Input: '{text}'
+Output: Just the Korean term. No explanations."""
+
+        try:
+            response = await self.model_flash_lite.generate_content_async(prompt)
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Failed to translate to Korean: {e}")
+            return text  # Fallback to original
+
+    async def translate_results_to_english(self, items: List[dict]) -> List[dict]:
+        """Translate Naver search results to English"""
+        
+        if not items:
+            return []
+            
+        # Prepare valid JSON input for Gemini
+        items_json = json.dumps([{
+            "title": item['title'],
+            "address": item.get('roadAddress') or item.get('address'),
+            "category": item.get('category'),
+            "mapx": item.get('mapx'),
+            "mapy": item.get('mapy')
+        } for item in items], ensure_ascii=False)
+        
+        prompt = f"""Translate these place names and addresses to English.
+        
+Context: These are search results from Naver Maps in Korea.
+
+Original Data:
+{items_json}
+
+Instructions:
+1. Translate "title" to English (keep it recognizable).
+2. Translate "address" to English.
+3. Keep "category", "mapx", "mapy" as is.
+4. Add original Korean "title" as "title_ko".
+5. Add original Korean "address" as "address_ko".
+
+Output Format: A pure JSON list of objects. No markdown formatting.
+Example:
+[
+  {{
+    "title": "Gyeongbokgung Palace",
+    "address": "161 Sajik-ro, Jongno-gu, Seoul",
+    "category": "Tourist Attraction",
+    "mapx": "...", 
+    "mapy": "...",
+    "title_ko": "경복궁",
+    "address_ko": "서울 종로구 사직로 161"
+  }}
+]"""
+
+        try:
+            response = await self.model_flash_lite.generate_content_async(prompt)
+            text = response.text.strip()
+            # Clean up markdown code blocks if present
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+                
+            return json.loads(text.strip())
+        except Exception as e:
+            logger.error(f"Failed to translate results to English: {e}")
+            # Fallback: return original items with minimal adaptation
+            return [{
+                **item,
+                "title_ko": item['title'],
+                "address_ko": item.get('roadAddress') or item.get('address'),
+                "title": item['title'], # Should ideally use original if translation fails
+                "address": item.get('roadAddress') or item.get('address')
+            } for item in items]
+
+
+    async def get_place_description(self, place_name: str, location: str = "") -> str:
+        """Get a brief description of a place using Gemini"""
+        
+        prompt = f"""Provide a brief, engaging description (2-3 sentences) for the place "{place_name}"{f" located in {location}" if location else ""} in Korea.
+        Focus on what makes it famous or worth visiting for a tourist.
+        Write in English."""
+        
+        try:
+            response = await self.model_flash_lite.generate_content_async(prompt)
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Failed to get place description: {e}")
+            return "Description unavailable."
 
 
 # Global Gemini service instance
 gemini_service = GeminiService()
+
 

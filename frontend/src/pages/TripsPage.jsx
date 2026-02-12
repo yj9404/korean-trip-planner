@@ -9,8 +9,7 @@ const TripsPage = ({ user }) => {
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-        start_date: '',
-        end_date: '',
+        date: '',
         destinations: '',
     });
 
@@ -53,8 +52,7 @@ const TripsPage = ({ user }) => {
             setFormData({
                 title: '',
                 description: '',
-                start_date: '',
-                end_date: '',
+                date: '',
                 destinations: '',
             });
         } catch (error) {
@@ -142,7 +140,7 @@ const TripsPage = ({ user }) => {
                                     <div className="flex items-center space-x-2 text-sm text-gray-500">
                                         <FiCalendar className="flex-shrink-0" />
                                         <span>
-                                            {new Date(trip.start_date).toLocaleDateString()} - {new Date(trip.end_date).toLocaleDateString()}
+                                            {new Date(trip.date).toLocaleDateString()}
                                         </span>
                                     </div>
 
@@ -199,32 +197,17 @@ const TripsPage = ({ user }) => {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Start Date *
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={formData.start_date}
-                                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                                        className="input"
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        End Date *
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={formData.end_date}
-                                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                                        className="input"
-                                        required
-                                    />
-                                </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Trip Date *
+                                </label>
+                                <input
+                                    type="date"
+                                    value={formData.date}
+                                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                    className="input"
+                                    required
+                                />
                             </div>
 
                             <div>
