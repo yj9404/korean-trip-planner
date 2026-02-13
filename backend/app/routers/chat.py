@@ -12,6 +12,7 @@ from app.models.chat_message import ChatMessageCreate, ChatMessageResponse
 from app.models.user_preferences import UserPreferencesUpdate, UserPreferencesResponse
 from app.services.firebase_service import firebase_service
 from app.services.gemini_service import gemini_service
+from app.dependencies import get_current_user, get_current_group
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,20 @@ router = APIRouter()
 
 # Chat Room Endpoints
 @router.post("/chat/rooms", response_model=ChatRoomResponse)
-async def create_chat_room(room_data: ChatRoomCreate):
-    """Create a new chat room"""
+async def create_chat_room(
+    room_data: ChatRoomCreate,
+    current_user: dict = Depends(get_current_user),
+    group_id: str = Depends(get_current_group)
+):
+    """Create a new chat room for the current group"""
     try:
         room_dict = room_data.model_dump()
+        room_dict["group_id"] = group_id
+        # Ensure creator is in participants
+        user_id = current_user["uid"]
+        if user_id not in room_dict["participants"]:
+            room_dict["participants"].append(user_id)
+            
         room_id = await firebase_service.create_chat_room(room_dict)
         
         created_room = await firebase_service.get_chat_room(room_id)
@@ -36,22 +47,45 @@ async def create_chat_room(room_data: ChatRoomCreate):
 
 
 @router.get("/chat/rooms/{room_id}", response_model=ChatRoomResponse)
-async def get_chat_room(room_id: str):
-    """Get chat room information"""
+async def get_chat_room(
+    room_id: str,
+    current_user: dict = Depends(get_current_user),
+    group_id: str = Depends(get_current_group)
+):
+    """Get chat room information (secured by group)"""
     room = await firebase_service.get_chat_room(room_id)
     if not room:
         raise HTTPException(status_code=404, detail="Chat room not found")
     
+    # Check if room belongs to current group
+    if room.get("group_id") and room["group_id"] != group_id:
+         raise HTTPException(status_code=403, detail="Room belongs to another group")
+         
     return ChatRoomResponse(**room)
 
 
 @router.get("/chat/rooms/user/{user_id}", response_model=List[ChatRoomResponse])
-async def get_user_chat_rooms(user_id: str):
-    """Get all chat rooms for a user"""
+async def get_user_chat_rooms(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+    group_id: str = Depends(get_current_group)
+):
+    """Get all chat rooms for the current group"""
+    # Security check: ensure requesting own rooms
+    if current_user["uid"] != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access other user's rooms")
+        
     try:
-        rooms = await firebase_service.get_user_chat_rooms(user_id)
+        # Fetch rooms for this group
+        rooms = await firebase_service.get_group_chat_rooms(group_id)
         return [ChatRoomResponse(**room) for room in rooms]
     except Exception as e:
+        if "Legacy" in str(e): # Fallback strictly for legacy support if needed
+             rooms = await firebase_service.get_user_chat_rooms(user_id)
+             # Filter out rooms that have a group_id different from current
+             filtered = [r for r in rooms if not r.get("group_id") or r.get("group_id") == group_id]
+             return [ChatRoomResponse(**room) for room in filtered]
+             
         raise HTTPException(status_code=500, detail=f"Failed to get chat rooms: {str(e)}")
 
 

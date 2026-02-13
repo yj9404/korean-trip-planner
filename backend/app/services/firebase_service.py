@@ -126,6 +126,7 @@ class FirebaseService:
             return None
     
     # Chat room operations
+    # Chat room operations
     async def create_chat_room(self, room_data: Dict[str, Any]) -> str:
         """Create a new chat room in Firestore"""
         room_data["created_at"] = datetime.utcnow()
@@ -145,9 +146,22 @@ class FirebaseService:
         return None
     
     async def get_user_chat_rooms(self, user_id: str) -> List[Dict[str, Any]]:
-        """Get all chat rooms for a user"""
+        """Get all chat rooms for a user (Legacy Support)"""
         rooms = []
         docs = self.db.collection("chat_rooms").where("participants", "array_contains", user_id).stream()
+        
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            rooms.append(data)
+        
+        return rooms
+
+    async def get_group_chat_rooms(self, group_id: str) -> List[Dict[str, Any]]:
+        """Get all chat rooms for a specific group"""
+        rooms = []
+        # Filter by group_id
+        docs = self.db.collection("chat_rooms").where("group_id", "==", group_id).stream()
         
         for doc in docs:
             data = doc.to_dict()
@@ -211,16 +225,19 @@ class FirebaseService:
     
     
     # Itinerary / Place operations (user-based, no trip context)
-    def add_place(self, user_id: str, place_data: Dict[str, Any]) -> str:
+    def add_place(self, user_id: str, place_data: Dict[str, Any], group_id: Optional[str] = None) -> str:
         """Add a place to user's itinerary"""
         place_data["user_id"] = user_id
+        if group_id:
+            place_data["group_id"] = group_id
+        
         place_data["created_at"] = datetime.utcnow()
         place_data["updated_at"] = datetime.utcnow()
         doc_ref = self.db.collection("places").document(user_id).collection("items").document()
         doc_ref.set(place_data)
         return doc_ref.id
     
-    def get_user_places(self, user_id: str) -> List[Dict[str, Any]]:
+    def get_user_places(self, user_id: str, group_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all places for a user, ordered by date and index"""
         places = []
         docs = (
@@ -229,21 +246,163 @@ class FirebaseService:
         )
         for doc in docs:
             data = doc.to_dict()
+            
+            # Filter by group_id if provided
+            if group_id:
+                if data.get("group_id") != group_id:
+                    continue
+            
             data["id"] = doc.id
             places.append(data)
         return places
     
     def update_place(self, user_id: str, place_id: str, place_data: Dict[str, Any]) -> bool:
         """Update a place in user's itinerary"""
+        # Ensure we don't accidentally remove group_id if not provided
         place_data["updated_at"] = datetime.utcnow()
         doc_ref = self.db.collection("places").document(user_id).collection("items").document(place_id)
-        doc_ref.update(place_data)
+        doc_ref.set(place_data, merge=True) # Change update to set with merge=True for safer partial updates
         return True
     
     def delete_place(self, user_id: str, place_id: str) -> bool:
         """Delete a place from user's itinerary"""
         self.db.collection("places").document(user_id).collection("items").document(place_id).delete()
         return True
+    
+    
+    # ========== Group Management ==========
+    def _generate_invite_code(self) -> str:
+        """Generate a unique 6-character alphanumeric invite code"""
+        import random
+        import string
+        while True:
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            # Check if code already exists
+            existing = self.db.collection("groups").where("invite_code", "==", code).limit(1).get()
+            if not existing:
+                return code
+    
+    async def create_group(self, name: str, owner_id: str) -> Dict[str, Any]:
+        """Create a new group and set creator as OWNER/ACTIVE member"""
+        invite_code = self._generate_invite_code()
+        group_data = {
+            "name": name,
+            "owner_id": owner_id,
+            "invite_code": invite_code,
+            "created_at": datetime.utcnow()
+        }
+        
+        # Create group
+        group_ref = self.db.collection("groups").document()
+        group_ref.set(group_data)
+        group_id = group_ref.id
+        
+        # Add owner as ACTIVE member
+        member_data = {
+            "group_id": group_id,
+            "user_id": owner_id,
+            "role": "OWNER",
+            "status": "ACTIVE",
+            "joined_at": datetime.utcnow()
+        }
+        member_ref = self.db.collection("group_members").document()
+        member_ref.set(member_data)
+        
+        # Set user's current_group_id
+        await self.update_user_preferences(owner_id, {"current_group_id": group_id})
+        
+        group_data["id"] = group_id
+        return group_data
+    
+    async def get_group(self, group_id: str) -> Optional[Dict[str, Any]]:
+        """Get a group by ID"""
+        doc = self.db.collection("groups").document(group_id).get()
+        if doc.exists:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            return data
+        return None
+    
+    async def find_group_by_invite_code(self, invite_code: str) -> Optional[Dict[str, Any]]:
+        """Find a group by invite code"""
+        docs = self.db.collection("groups").where("invite_code", "==", invite_code).limit(1).get()
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            return data
+        return None
+    
+    async def request_join_group(self, user_id: str, invite_code: str) -> Optional[str]:
+        """Request to join a group (creates PENDING membership)"""
+        group = await self.find_group_by_invite_code(invite_code)
+        if not group:
+            return None
+        
+        # Check if already a member
+        existing = self.db.collection("group_members").where("group_id", "==", group["id"]).where("user_id", "==", user_id).limit(1).get()
+        if list(existing):
+            return None  # Already requested or member
+        
+        member_data = {
+            "group_id": group["id"],
+            "user_id": user_id,
+            "role": "MEMBER",
+            "status": "PENDING",
+            "joined_at": datetime.utcnow()
+        }
+        member_ref = self.db.collection("group_members").document()
+        member_ref.set(member_data)
+        return member_ref.id
+    
+    async def get_user_groups(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all groups where user has ACTIVE membership"""
+        groups = []
+        member_docs = self.db.collection("group_members").where("user_id", "==", user_id).where("status", "==", "ACTIVE").stream()
+        
+        for member_doc in member_docs:
+            member_data = member_doc.to_dict()
+            group = await self.get_group(member_data["group_id"])
+            if group:
+                groups.append(group)
+        
+        return groups
+    
+    async def get_pending_members(self, group_id: str) -> List[Dict[str, Any]]:
+        """Get all pending members for a group (OWNER only should call)"""
+        members = []
+        docs = self.db.collection("group_members").where("group_id", "==", group_id).where("status", "==", "PENDING").stream()
+        
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            members.append(data)
+        
+        return members
+    
+    async def approve_member(self, member_id: str, approved: bool) -> bool:
+        """Approve or reject a pending member"""
+        member_ref = self.db.collection("group_members").document(member_id)
+        member_doc = member_ref.get()
+        
+        if not member_doc.exists:
+            return False
+        
+        if approved:
+            member_ref.update({"status": "ACTIVE"})
+        else:
+            member_ref.delete()  # Reject = delete the request
+        
+        return True
+    
+    async def check_user_group_access(self, user_id: str, group_id: str) -> bool:
+        """Check if user has ACTIVE access to a group"""
+        docs = self.db.collection("group_members").where("user_id", "==", user_id).where("group_id", "==", group_id).where("status", "==", "ACTIVE").limit(1).get()
+        return len(list(docs)) > 0
+    
+    async def is_group_owner(self, user_id: str, group_id: str) -> bool:
+        """Check if user is the owner of a group"""
+        docs = self.db.collection("group_members").where("user_id", "==", user_id).where("group_id", "==", group_id).where("role", "==", "OWNER").limit(1).get()
+        return len(list(docs)) > 0
 
 
 

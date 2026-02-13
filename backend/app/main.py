@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import settings
-from app.routers import translate, trips, ai_guide, chat, itinerary, places
+from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups
 from app.services.firebase_service import firebase_service
 
 
@@ -41,6 +41,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(groups.router, prefix=f"/api/{settings.api_version}", tags=["Groups"])
 app.include_router(translate.router, prefix=f"/api/{settings.api_version}", tags=["Translation"])
 # app.include_router(trips.router, prefix=f"/api/{settings.api_version}", tags=["Trips"])  # Removed - single trip architecture
 app.include_router(ai_guide.router, prefix=f"/api/{settings.api_version}", tags=["AI Guide"])

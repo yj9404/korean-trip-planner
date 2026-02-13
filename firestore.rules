@@ -3,27 +3,55 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Helper function: Check if user is an ACTIVE member of a group
+    function isActiveMember(groupId) {
+      return exists(/databases/$(database)/documents/group_members/$(request.auth.uid + '_' + groupId)) &&
+             get(/databases/$(database)/documents/group_members/$(request.auth.uid + '_' + groupId)).data.status == 'ACTIVE';
+    }
+    
+    // Helper function: Check if user is OWNER of a group
+    function isGroupOwner(groupId) {
+      return exists(/databases/$(database)/documents/group_members/$(request.auth.uid + '_' + groupId)) &&
+             get(/databases/$(database)/documents/group_members/$(request.auth.uid + '_' + groupId)).data.role == 'OWNER';
+    }
+    
     // User preferences: Users can read and write their own preferences
     match /user_preferences/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Chat rooms: Allow any authenticated user to create/read for now to fix loading issue
+    // Groups: Any authenticated user can create a group
+    match /groups/{groupId} {
+      allow read: if request.auth != null && isActiveMember(groupId);
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && isGroupOwner(groupId);
+    }
+    
+    // Group Members: Owner can approve, user can join
+    match /group_members/{memberId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null; // Join request
+      allow update, delete: if request.auth != null && 
+        (isGroupOwner(resource.data.group_id) || request.auth.uid == resource.data.user_id);
+    }
+    
+    // Chat rooms: Must be ACTIVE member of the group
     match /chat_rooms/{roomId} {
-       allow read, write: if request.auth != null;
+       allow read, write: if request.auth != null && isActiveMember(resource.data.group_id);
        
        match /messages/{messageId} {
-         allow read, write: if request.auth != null;
+         allow read, write: if request.auth != null && isActiveMember(get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.group_id);
        }
     }
     
     
-    // Places (user-based, no trip context)
+    // Places (group-based): Must be ACTIVE member
     match /places/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
       
       match /items/{placeId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
+        // TODO: Add group_id check when implementing group-based places
       }
     }
     

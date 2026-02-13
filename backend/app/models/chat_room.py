@@ -8,7 +8,8 @@ from datetime import datetime
 class ChatRoom(BaseModel):
     """Chat room model"""
     id: Optional[str] = None
-    trip_id: str
+    group_id: Optional[str] = None  # NEW
+    trip_id: Optional[str] = None   # Legacy
     participants: List[str]  # List of user IDs
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -16,14 +17,16 @@ class ChatRoom(BaseModel):
 
 class ChatRoomCreate(BaseModel):
     """Chat room creation request"""
-    trip_id: str
+    group_id: Optional[str] = None
+    trip_id: Optional[str] = None
     participants: List[str] = Field(..., min_length=1, description="At least one participant required")
 
 
 class ChatRoomResponse(BaseModel):
     """Chat room response"""
     id: str
-    trip_id: str
+    group_id: Optional[str] = None
+    trip_id: Optional[str] = None
     participants: List[str]
     created_at: datetime
     updated_at: datetime

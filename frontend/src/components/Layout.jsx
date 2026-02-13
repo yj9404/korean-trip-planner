@@ -14,6 +14,7 @@ import {
     FiX,
     FiLogOut
 } from 'react-icons/fi';
+import GroupSwitcher from './GroupSwitcher';
 
 const Layout = ({ children, user, fullWidth = false }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -106,6 +107,7 @@ const Layout = ({ children, user, fullWidth = false }) => {
 
                         {/* User Menu */}
                         <div className="flex items-center space-x-4">
+                            <GroupSwitcher />
                             <div className="hidden sm:block text-right">
                                 <p className="text-sm font-medium text-gray-900">
                                     {user?.displayName || user?.email}

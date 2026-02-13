@@ -6,7 +6,7 @@ from datetime import date
 
 from app.models.itinerary import PlaceCreate, PlaceUpdate, PlaceResponse
 from app.services.firebase_service import firebase_service
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_current_group
 
 router = APIRouter(prefix="/api/v1/itinerary", tags=["itinerary"])
 
@@ -32,9 +32,10 @@ async def debug_test_places():
 @router.post("/places", response_model=dict)
 async def add_place(
     place: PlaceCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    group_id: str = Depends(get_current_group)
 ):
-    """Add a new place to user's itinerary"""
+    """Add a new place to current group's itinerary"""
     user_id = current_user.get("uid")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found")
@@ -44,20 +45,23 @@ async def add_place(
     if isinstance(place_dict.get("visit_date"), date):
         place_dict["visit_date"] = place_dict["visit_date"].isoformat()
     
-    place_id = firebase_service.add_place(user_id, place_dict)
+    # Add place with group_id
+    place_id = firebase_service.add_place(user_id, place_dict, group_id)
     return {"id": place_id, "message": "Place added successfully"}
 
 
 @router.get("/places", response_model=List[dict])
 async def get_places(
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    group_id: str = Depends(get_current_group)
 ):
-    """Get all places for the current user"""
+    """Get all places for the current group"""
     user_id = current_user.get("uid")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found")
     
-    places = firebase_service.get_user_places(user_id)
+    # Get places filtered by group_id
+    places = firebase_service.get_user_places(user_id, group_id)
     return places
 
 

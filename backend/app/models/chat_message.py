@@ -9,6 +9,7 @@ class ChatMessage(BaseModel):
     """Chat message model"""
     id: Optional[str] = None
     room_id: str
+    group_id: str  # NEW: Group isolation
     sender_id: str
     sender_name: str
     text: str

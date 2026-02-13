@@ -12,6 +12,7 @@ class UserPreferences(BaseModel):
     korean_name: Optional[str] = None
     english_name: Optional[str] = None
     display_name: Optional[str] = None
+    current_group_id: Optional[str] = None
 
 
 class UserPreferencesUpdate(BaseModel):
@@ -21,6 +22,7 @@ class UserPreferencesUpdate(BaseModel):
     korean_name: Optional[str] = None
     english_name: Optional[str] = None
     display_name: Optional[str] = None
+    current_group_id: Optional[str] = None
 
 
 class UserPreferencesResponse(BaseModel):
@@ -31,3 +33,4 @@ class UserPreferencesResponse(BaseModel):
     korean_name: Optional[str] = None
     english_name: Optional[str] = None
     display_name: Optional[str] = None
+    current_group_id: Optional[str] = None
