@@ -357,26 +357,38 @@ class FirebaseService:
     async def get_user_groups(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all groups where user has ACTIVE membership"""
         groups = []
-        member_docs = self.db.collection("group_members").where("user_id", "==", user_id).where("status", "==", "ACTIVE").stream()
-        
-        for member_doc in member_docs:
-            member_data = member_doc.to_dict()
-            group = await self.get_group(member_data["group_id"])
-            if group:
-                groups.append(group)
-        
+        try:
+            # Query by single field to avoid composite index requirement
+            member_docs = self.db.collection("group_members").where("user_id", "==", user_id).stream()
+            for member_doc in member_docs:
+                member_data = member_doc.to_dict()
+                # Filter ACTIVE status in Python
+                if member_data.get("status") != "ACTIVE":
+                    continue
+                group = await self.get_group(member_data["group_id"])
+                if group:
+                    # Attach role info from member record
+                    group["role"] = member_data.get("role", "MEMBER")
+                    group["member_id"] = member_doc.id
+                    groups.append(group)
+        except Exception as e:
+            print(f"Error getting user groups: {e}")
         return groups
     
     async def get_pending_members(self, group_id: str) -> List[Dict[str, Any]]:
         """Get all pending members for a group (OWNER only should call)"""
         members = []
-        docs = self.db.collection("group_members").where("group_id", "==", group_id).where("status", "==", "PENDING").stream()
-        
-        for doc in docs:
-            data = doc.to_dict()
-            data["id"] = doc.id
-            members.append(data)
-        
+        try:
+            # Query by single field to avoid composite index requirement
+            docs = self.db.collection("group_members").where("group_id", "==", group_id).stream()
+            for doc in docs:
+                data = doc.to_dict()
+                # Filter PENDING status in Python
+                if data.get("status") == "PENDING":
+                    data["id"] = doc.id
+                    members.append(data)
+        except Exception as e:
+            print(f"Error getting pending members: {e}")
         return members
     
     async def approve_member(self, member_id: str, approved: bool) -> bool:
@@ -396,13 +408,133 @@ class FirebaseService:
     
     async def check_user_group_access(self, user_id: str, group_id: str) -> bool:
         """Check if user has ACTIVE access to a group"""
-        docs = self.db.collection("group_members").where("user_id", "==", user_id).where("group_id", "==", group_id).where("status", "==", "ACTIVE").limit(1).get()
-        return len(list(docs)) > 0
+        try:
+            # Query by single field, filter in Python
+            docs = self.db.collection("group_members").where("user_id", "==", user_id).stream()
+            for doc in docs:
+                data = doc.to_dict()
+                if data.get("group_id") == group_id and data.get("status") == "ACTIVE":
+                    return True
+        except Exception as e:
+            print(f"Error checking group access: {e}")
+        return False
     
     async def is_group_owner(self, user_id: str, group_id: str) -> bool:
         """Check if user is the owner of a group"""
-        docs = self.db.collection("group_members").where("user_id", "==", user_id).where("group_id", "==", group_id).where("role", "==", "OWNER").limit(1).get()
-        return len(list(docs)) > 0
+        try:
+            # Query by single field, filter in Python
+            docs = self.db.collection("group_members").where("user_id", "==", user_id).stream()
+            for doc in docs:
+                data = doc.to_dict()
+                if data.get("group_id") == group_id and data.get("role") == "OWNER":
+                    return True
+        except Exception as e:
+            print(f"Error checking group owner: {e}")
+        return False
+    
+    async def get_group_members(self, group_id: str) -> List[Dict[str, Any]]:
+        """Get all ACTIVE members of a group, enriched with english_name from user_preferences"""
+        members = []
+        try:
+            # Query by single field to avoid composite index requirement
+            members_docs = self.db.collection("group_members").where("group_id", "==", group_id).get()
+            for doc in members_docs:
+                data = doc.to_dict()
+                # Filter ACTIVE status in Python
+                if data.get("status") != "ACTIVE":
+                    continue
+
+                user_id = data.get("user_id")
+
+                # Fetch english_name from user_preferences
+                display_name = user_id  # fallback to uid
+                try:
+                    prefs_doc = self.db.collection("user_preferences").document(user_id).get()
+                    if prefs_doc.exists:
+                        prefs = prefs_doc.to_dict()
+                        display_name = prefs.get("english_name") or user_id
+                except Exception:
+                    pass  # Keep fallback uid
+
+                members.append({
+                    "id": doc.id,
+                    "user_id": user_id,
+                    "display_name": display_name,
+                    "role": data.get("role"),
+                    "joined_at": data.get("joined_at"),
+                    "status": data.get("status")
+                })
+        except Exception as e:
+            print(f"Error getting group members: {e}")
+        return members
+    
+    async def delete_group(self, group_id: str) -> bool:
+        """Delete a group and all associated memberships"""
+        try:
+            # Delete all group members
+            members_docs = self.db.collection("group_members").where("group_id", "==", group_id).get()
+            for doc in members_docs:
+                doc.reference.delete()
+            
+            # Delete the group
+            self.db.collection("groups").document(group_id).delete()
+            
+            # Clear current_group_id for users who had this group selected
+            # Note: This is a best-effort cleanup. Users will automatically handle missing groups on next login
+            
+            return True
+        except Exception as e:
+            print(f"Error deleting group: {e}")
+            return False
+    
+    async def leave_group(self, user_id: str, group_id: str) -> bool:
+        """Remove user from a group (user leaves voluntarily)"""
+        try:
+            # Find and delete the membership
+            docs = self.db.collection("group_members").where("user_id", "==", user_id).where("group_id", "==", group_id).get()
+            
+            for doc in docs:
+                doc.reference.delete()
+            
+            # Clear current_group_id if this was the active group
+            prefs_ref = self.db.collection("user_preferences").document(user_id)
+            prefs = prefs_ref.get()
+            if prefs.exists:
+                data = prefs.to_dict()
+                if data.get("current_group_id") == group_id:
+                    prefs_ref.update({"current_group_id": None})
+            
+            return True
+        except Exception as e:
+            print(f"Error leaving group: {e}")
+            return False
+    
+    async def kick_member(self, group_id: str, member_user_id: str) -> bool:
+        """Remove a member from a group (kicked by owner)"""
+        try:
+            # Find and delete the membership (only ACTIVE and MEMBER role, not OWNER)
+            docs = self.db.collection("group_members").where("user_id", "==", member_user_id).where("group_id", "==", group_id).where("role", "==", "MEMBER").get()
+            
+            deleted = False
+            for doc in docs:
+                doc.reference.delete()
+                deleted = True
+            
+            if not deleted:
+                return False
+            
+            # Clear current_group_id if this was the active group
+            prefs_ref = self.db.collection("user_preferences").document(member_user_id)
+            prefs = prefs_ref.get()
+            if prefs.exists:
+                data = prefs.to_dict()
+                if data.get("current_group_id") == group_id:
+                    prefs_ref.update({"current_group_id": None})
+            
+            return True
+        except Exception as e:
+            print(f"Error kicking member: {e}")
+            return False
 
 
 

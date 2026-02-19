@@ -347,6 +347,65 @@ Example:
             logger.error(f"Failed to get place description: {e}")
             return "Description unavailable."
 
+    async def analyze_menu_image(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
+        """Analyze a Korean menu image and return English descriptions for each item"""
+        import google.generativeai as genai
+
+        prompt = """You are a Korean food expert helping foreign tourists understand a Korean restaurant menu.
+
+Analyze this menu image and extract every menu item you can see.
+
+For each item, provide:
+1. Korean name (as written on the menu)
+2. English name / transliteration
+3. Brief description in English (what it is, main ingredients, taste profile)
+4. Approximate price if visible (write null if not visible)
+5. Whether it's spicy (true/false/unknown)
+6. Whether it's vegetarian-friendly (true/false/unknown)
+
+Return ONLY a valid JSON object in this exact format (no markdown, no extra text):
+{
+  "items": [
+    {
+      "korean_name": "비빔밥",
+      "english_name": "Bibimbap",
+      "description": "Mixed rice bowl with assorted vegetables, egg, and gochujang (red pepper paste). Colorful, nutritious, and delicious.",
+      "price": "9,000",
+      "is_spicy": true,
+      "is_vegetarian": false
+    }
+  ],
+  "restaurant_type": "Korean BBQ / Traditional / Noodles / etc.",
+  "notes": "Any important notes about the menu (e.g., seasonal items, set menus)"
+}
+
+If you cannot read the menu clearly, return:
+{"error": "Cannot read menu clearly. Please try a clearer photo."}"""
+
+        try:
+            image_part = {
+                "mime_type": mime_type,
+                "data": image_bytes
+            }
+            response = await self.model_flash.generate_content_async([prompt, image_part])
+            raw = response.text.strip()
+
+            # Clean up markdown code blocks
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            if raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+
+            return json.loads(raw.strip())
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse menu analysis JSON: {e}")
+            return {"error": "Failed to parse AI response. Please try again."}
+        except Exception as e:
+            logger.error(f"Failed to analyze menu image: {e}")
+            return {"error": f"Analysis failed: {str(e)}"}
+
 
 # Global Gemini service instance
 gemini_service = GeminiService()

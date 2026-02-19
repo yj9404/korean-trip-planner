@@ -39,6 +39,7 @@ class GroupResponse(BaseModel):
     owner_id: str
     invite_code: str
     created_at: datetime
+    role: Optional[GroupRole] = None  # Populated when fetched via my-groups
 
 
 class GroupMember(BaseModel):
@@ -59,11 +60,12 @@ class GroupMemberCreate(BaseModel):
 class GroupMemberResponse(BaseModel):
     """Group member response"""
     id: str
-    group_id: str
+    group_id: Optional[str] = None
     user_id: str
+    display_name: Optional[str] = None  # english_name from user_preferences
     role: GroupRole
     status: GroupMemberStatus
-    joined_at: datetime
+    joined_at: Optional[datetime] = None
 
 
 class GroupMemberApprove(BaseModel):

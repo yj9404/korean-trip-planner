@@ -162,3 +162,117 @@ async def get_current_group_info(
             detail="Group not found"
         )
     return group
+
+
+@router.get("/{group_id}/members", response_model=List[GroupMemberResponse])
+async def get_group_members(
+    group_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all active members of a group"""
+    user_id = current_user["uid"]
+    
+    # Check if user has access to this group
+    has_access = await firebase_service.check_user_group_access(user_id, group_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+    
+    members = await firebase_service.get_group_members(group_id)
+    return members
+
+
+@router.delete("/{group_id}", status_code=status.HTTP_200_OK)
+async def delete_group(
+    group_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a group (OWNER only)"""
+    user_id = current_user["uid"]
+    
+    # Check if user is owner
+    is_owner = await firebase_service.is_group_owner(user_id, group_id)
+    if not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only group owner can delete the group"
+        )
+    
+    success = await firebase_service.delete_group(group_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete group"
+        )
+    
+    return {"message": "Group deleted successfully"}
+
+
+@router.post("/{group_id}/leave", status_code=status.HTTP_200_OK)
+async def leave_group(
+    group_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Leave a group (cannot leave if owner)"""
+    user_id = current_user["uid"]
+    
+    # Check if user is member
+    has_access = await firebase_service.check_user_group_access(user_id, group_id)
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group"
+        )
+    
+    # Prevent owner from leaving
+    is_owner = await firebase_service.is_group_owner(user_id, group_id)
+    if is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Owner cannot leave the group. Please delete the group or transfer ownership first."
+        )
+    
+    success = await firebase_service.leave_group(user_id, group_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to leave group"
+        )
+    
+    return {"message": "Left group successfully"}
+
+
+@router.delete("/{group_id}/members/{member_user_id}", status_code=status.HTTP_200_OK)
+async def kick_member(
+    group_id: str,
+    member_user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Kick a member from group (OWNER only)"""
+    user_id = current_user["uid"]
+    
+    # Check if user is owner
+    is_owner = await firebase_service.is_group_owner(user_id, group_id)
+    if not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only group owner can kick members"
+        )
+    
+    # Cannot kick self
+    if member_user_id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot kick yourself"
+        )
+    
+    success = await firebase_service.kick_member(group_id, member_user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found or already removed"
+        )
+    
+    return {"message": "Member kicked successfully"}

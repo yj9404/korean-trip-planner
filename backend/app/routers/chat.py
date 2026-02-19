@@ -164,7 +164,10 @@ class TranslateRequest(BaseModel):
 
 
 @router.post("/chat/translate")
-async def translate_message(request: TranslateRequest):
+async def translate_message(
+    request: TranslateRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """Translate a message"""
     logger.info(f"[TRANSLATE API] Received request: text='{request.text[:50]}...', source={request.source_lang}, target={request.target_lang}")
     try:
@@ -184,8 +187,15 @@ async def translate_message(request: TranslateRequest):
 
 # User Preferences Endpoints
 @router.get("/chat/preferences/{user_id}", response_model=UserPreferencesResponse)
-async def get_user_preferences(user_id: str):
+async def get_user_preferences(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
     """Get user chat preferences"""
+    # Security check: ensure requesting own preferences
+    if current_user["uid"] != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access other user's preferences")
+
     try:
         prefs = await firebase_service.get_user_preferences(user_id)
         return UserPreferencesResponse(**prefs)
@@ -194,8 +204,16 @@ async def get_user_preferences(user_id: str):
 
 
 @router.put("/chat/preferences/{user_id}", response_model=UserPreferencesResponse)
-async def update_user_preferences(user_id: str, preferences: UserPreferencesUpdate):
+async def update_user_preferences(
+    user_id: str,
+    preferences: UserPreferencesUpdate,
+    current_user: dict = Depends(get_current_user)
+):
     """Update user chat preferences"""
+    # Security check: ensure updating own preferences
+    if current_user["uid"] != user_id:
+        raise HTTPException(status_code=403, detail="Cannot update other user's preferences")
+
     try:
         prefs_dict = preferences.model_dump(exclude_none=True)
         prefs_dict["user_id"] = user_id

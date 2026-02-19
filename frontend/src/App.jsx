@@ -18,6 +18,8 @@ import ChatPage from './pages/ChatPage';
 import ItineraryPage from './pages/ItineraryPage';
 import ProfilePage from './pages/ProfilePage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
+import GroupsPage from './pages/GroupsPage';
+import MenuScanPage from './pages/MenuScanPage';
 
 // Components
 import Layout from './components/Layout';
@@ -129,20 +131,18 @@ function App() {
                                 )
                             }
                         />
-                        {/* Removed - Single trip architecture
                         <Route
-                            path="/trips"
+                            path="/groups"
                             element={
                                 user ? (
                                     <Layout user={user}>
-                                        <TripsPage user={user} />
+                                        <GroupsPage />
                                     </Layout>
                                 ) : (
                                     <Navigate to="/login" />
                                 )
                             }
                         />
-                        */}
                         <Route
                             path="/ai-guide"
                             element={
@@ -208,6 +208,19 @@ function App() {
                             element={
                                 user ? (
                                     <CompleteProfilePage user={user} />
+                                ) : (
+                                    <Navigate to="/login" />
+                                )
+                            }
+                        />
+
+                        <Route
+                            path="/menu-scan"
+                            element={
+                                user ? (
+                                    <Layout user={user}>
+                                        <MenuScanPage user={user} />
+                                    </Layout>
                                 ) : (
                                     <Navigate to="/login" />
                                 )

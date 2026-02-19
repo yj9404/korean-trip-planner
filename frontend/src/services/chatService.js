@@ -2,7 +2,7 @@
  * Chat service for API calls and real-time messaging
  */
 
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -10,12 +10,29 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 /**
  * Create a new chat room
  */
+// Helper to get auth headers
+const getAuthHeaders = async () => {
+    const user = auth.currentUser;
+    if (user) {
+        const token = await user.getIdToken();
+        return {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        };
+    }
+    return {
+        'Content-Type': 'application/json',
+    };
+};
+
+/**
+ * Create a new chat room
+ */
 export const createChatRoom = async (tripId, participants) => {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/api/v1/chat/rooms`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
             trip_id: tripId,
             participants: participants,
@@ -33,7 +50,10 @@ export const createChatRoom = async (tripId, participants) => {
  * Get chat room information
  */
 export const getChatRoom = async (roomId) => {
-    const response = await fetch(`${API_URL}/api/v1/chat/rooms/${roomId}`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/api/v1/chat/rooms/${roomId}`, {
+        headers,
+    });
 
     if (!response.ok) {
         throw new Error('Failed to get chat room');
@@ -46,7 +66,10 @@ export const getChatRoom = async (roomId) => {
  * Get all chat rooms for a user
  */
 export const getUserChatRooms = async (userId) => {
-    const response = await fetch(`${API_URL}/api/v1/chat/rooms/user/${userId}`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/api/v1/chat/rooms/user/${userId}`, {
+        headers,
+    });
 
     if (!response.ok) {
         throw new Error('Failed to get chat rooms');
@@ -59,11 +82,10 @@ export const getUserChatRooms = async (userId) => {
  * Send a message to a chat room
  */
 export const sendMessage = async (roomId, messageData) => {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/api/v1/chat/rooms/${roomId}/messages`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(messageData),
     });
 
@@ -78,7 +100,10 @@ export const sendMessage = async (roomId, messageData) => {
  * Get messages from a chat room
  */
 export const getMessages = async (roomId, messageLimit = 50) => {
-    const response = await fetch(`${API_URL}/api/v1/chat/rooms/${roomId}/messages?limit=${messageLimit}`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/api/v1/chat/rooms/${roomId}/messages?limit=${messageLimit}`, {
+        headers,
+    });
 
     if (!response.ok) {
         throw new Error('Failed to get messages');
@@ -91,11 +116,10 @@ export const getMessages = async (roomId, messageLimit = 50) => {
  * Translate a message
  */
 export const translateMessage = async (text, sourceLang, targetLang) => {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/api/v1/chat/translate`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
             text,
             source_lang: sourceLang,
@@ -114,7 +138,10 @@ export const translateMessage = async (text, sourceLang, targetLang) => {
  * Get user preferences
  */
 export const getUserPreferences = async (userId) => {
-    const response = await fetch(`${API_URL}/api/v1/chat/preferences/${userId}`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/api/v1/chat/preferences/${userId}`, {
+        headers,
+    });
 
     if (!response.ok) {
         throw new Error('Failed to get preferences');
@@ -127,11 +154,10 @@ export const getUserPreferences = async (userId) => {
  * Update user preferences
  */
 export const updateUserPreferences = async (userId, preferences) => {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/api/v1/chat/preferences/${userId}`, {
         method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(preferences),
     });
 

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import settings
-from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups
+from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups, menu
 from app.services.firebase_service import firebase_service
 
 
@@ -48,6 +48,7 @@ app.include_router(ai_guide.router, prefix=f"/api/{settings.api_version}", tags=
 app.include_router(chat.router, prefix=f"/api/{settings.api_version}", tags=["Chat"])
 app.include_router(itinerary.router, tags=["Itinerary"])
 app.include_router(places.router, prefix="/api/v1", tags=["Places"])
+app.include_router(menu.router, prefix="/api/v1", tags=["Menu"])
 
 
 @app.get("/")
