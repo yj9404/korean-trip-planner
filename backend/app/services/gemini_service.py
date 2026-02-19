@@ -1,10 +1,11 @@
 """Google Gemini AI service for translation and travel guidance"""
 
-import google.generativeai as genai
+from google import genai
 from typing import Optional, List
 from datetime import datetime
 import logging
 import traceback
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -13,24 +14,22 @@ logger = logging.getLogger(__name__)
 from app.config import settings
 from app.models.translation import TranslationRequest, TranslationResponse
 from app.models.ai_guide import AIGuideRequest, AIGuideResponse, Recommendation
-import json
+
+
+FLASH_LITE = 'gemini-2.5-flash-lite'
+FLASH = 'gemini-2.5-flash'
 
 
 class GeminiService:
     """Service for Google Gemini AI operations"""
     
     def __init__(self):
-        self.model_flash_lite: Optional[genai.GenerativeModel] = None
-        self.model_flash: Optional[genai.GenerativeModel] = None
+        self.client: Optional[genai.Client] = None
         self._configure()
     
     def _configure(self):
         """Configure Gemini API"""
-        genai.configure(api_key=settings.gemini_api_key)
-        # Use Gemini 2.5 Flash Lite for translation (fast)
-        self.model_flash_lite = genai.GenerativeModel('gemini-2.5-flash-lite')
-        # Use Gemini 2.5 Flash for AI guide/explanations (smart)
-        self.model_flash = genai.GenerativeModel('gemini-2.5-flash')
+        self.client = genai.Client(api_key=settings.gemini_api_key)
     
     async def translate(self, request: TranslationRequest) -> TranslationResponse:
         """Translate text using Gemini"""
@@ -56,7 +55,10 @@ Text to translate:
 
 Translation:"""
         
-        response = self.model_flash_lite.generate_content(prompt)
+        response = await self.client.aio.models.generate_content(
+            model=FLASH_LITE,
+            contents=prompt
+        )
         translated_text = response.text.strip()
         
         return TranslationResponse(
@@ -95,11 +97,12 @@ Provide a helpful, detailed response that includes:
 
 Keep the tone warm, informative, and encouraging."""
         
-        response = self.model_flash.generate_content(prompt)
+        response = await self.client.aio.models.generate_content(
+            model=FLASH,
+            contents=prompt
+        )
         guide_text = response.text.strip()
         
-        # For now, return a simple response
-        # In the future, we can parse the response to extract structured recommendations
         return AIGuideResponse(
             query=request.query,
             response=guide_text,
@@ -132,7 +135,10 @@ For each recommendation, provide:
 
 Format your response as a numbered list with clear sections."""
         
-        response = self.model_flash.generate_content(prompt)
+        response = await self.client.aio.models.generate_content(
+            model=FLASH,
+            contents=prompt
+        )
         
         # TODO: Parse the response and create structured Recommendation objects
         return []
@@ -144,7 +150,6 @@ Format your response as a numbered list with clear sections."""
         target_lang: str
     ) -> str:
         """Translate a chat message quickly"""
-        import asyncio
         
         if source_lang == target_lang:
             return text
@@ -167,17 +172,13 @@ Translation:"""
         try:
             logger.info(f"Translate Request: {text}, {source_lang} -> {target_lang}")
             
-            if not self.model_flash_lite:
-                self._configure()
+            response = await self.client.aio.models.generate_content(
+                model=FLASH_LITE,
+                contents=prompt
+            )
             
-            response = await self.model_flash_lite.generate_content_async(prompt)
-            
-            if not response:
-                logger.warning("Gemini returned None response")
-                return text
-
-            if not response.text:
-                logger.warning(f"Gemini returned empty text. Candidates: {response.candidates}")
+            if not response or not response.text:
+                logger.warning("Gemini returned empty response")
                 return text
 
             raw = response.text.strip()
@@ -248,7 +249,10 @@ Focus on:
 
 Keep it conversational and helpful."""
         
-        response = self.model_flash.generate_content(prompt)
+        response = await self.client.aio.models.generate_content(
+            model=FLASH,
+            contents=prompt
+        )
         return response.text.strip()
 
 
@@ -260,7 +264,10 @@ Input: '{text}'
 Output: Just the Korean term. No explanations."""
 
         try:
-            response = await self.model_flash_lite.generate_content_async(prompt)
+            response = await self.client.aio.models.generate_content(
+                model=FLASH_LITE,
+                contents=prompt
+            )
             return response.text.strip()
         except Exception as e:
             logger.error(f"Failed to translate to Korean: {e}")
@@ -310,7 +317,10 @@ Example:
 ]"""
 
         try:
-            response = await self.model_flash_lite.generate_content_async(prompt)
+            response = await self.client.aio.models.generate_content(
+                model=FLASH_LITE,
+                contents=prompt
+            )
             text = response.text.strip()
             # Clean up markdown code blocks if present
             if text.startswith("```json"):
@@ -328,7 +338,7 @@ Example:
                 **item,
                 "title_ko": item['title'],
                 "address_ko": item.get('roadAddress') or item.get('address'),
-                "title": item['title'], # Should ideally use original if translation fails
+                "title": item['title'],
                 "address": item.get('roadAddress') or item.get('address')
             } for item in items]
 
@@ -341,7 +351,10 @@ Example:
         Write in English."""
         
         try:
-            response = await self.model_flash_lite.generate_content_async(prompt)
+            response = await self.client.aio.models.generate_content(
+                model=FLASH_LITE,
+                contents=prompt
+            )
             return response.text.strip()
         except Exception as e:
             logger.error(f"Failed to get place description: {e}")
@@ -349,7 +362,7 @@ Example:
 
     async def analyze_menu_image(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
         """Analyze a Korean menu image and return English descriptions for each item"""
-        import google.generativeai as genai
+        import base64
 
         prompt = """You are a Korean food expert helping foreign tourists understand a Korean restaurant menu.
 
@@ -383,11 +396,17 @@ If you cannot read the menu clearly, return:
 {"error": "Cannot read menu clearly. Please try a clearer photo."}"""
 
         try:
+            # New SDK: inline_data with base64 encoded bytes
             image_part = {
-                "mime_type": mime_type,
-                "data": image_bytes
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": base64.b64encode(image_bytes).decode("utf-8")
+                }
             }
-            response = await self.model_flash.generate_content_async([prompt, image_part])
+            response = await self.client.aio.models.generate_content(
+                model=FLASH,
+                contents=[prompt, image_part]
+            )
             raw = response.text.strip()
 
             # Clean up markdown code blocks
@@ -409,5 +428,3 @@ If you cannot read the menu clearly, return:
 
 # Global Gemini service instance
 gemini_service = GeminiService()
-
-

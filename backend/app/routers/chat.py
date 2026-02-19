@@ -169,10 +169,8 @@ async def translate_message(
     current_user: dict = Depends(get_current_user)
 ):
     """Translate a message"""
-    logger.info(f"[TRANSLATE API] Received request: text='{request.text[:50]}...', source={request.source_lang}, target={request.target_lang}")
     try:
         translated = await gemini_service.translate_message(request.text, request.source_lang, request.target_lang)
-        logger.info(f"[TRANSLATE API] Translation successful: '{translated[:50]}...'")
         return {
             "original": request.text,
             "translated": translated,
