@@ -1,8 +1,20 @@
 """FastAPI application entry point"""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import time
+import logging
+import sys
+
+# Configure logging with timestamp
+logging.basicConfig(
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups, menu
@@ -14,13 +26,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup: Initialize Firebase
     firebase_service.initialize()
-    print("🔥 Firebase initialized")
-    print(f"🤖 Gemini API configured")
+    logger.info("🔥 Firebase initialized")
+    logger.info(f"🤖 Gemini API configured")
     
     yield
     
     # Shutdown: Cleanup
-    print("👋 Shutting down...")
+    logger.info("👋 Shutting down...")
 
 
 # Create FastAPI application
@@ -39,6 +51,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    logger.info(f"{request.method} {request.url.path} - {response.status_code} - {process_time:.4f}s")
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
 
 # Include routers
 app.include_router(groups.router, prefix=f"/api/{settings.api_version}", tags=["Groups"])

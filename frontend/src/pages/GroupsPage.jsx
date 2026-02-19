@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGroup } from '../contexts/GroupContext';
 import { auth } from '../services/firebase';
-import { FiUsers, FiLogOut, FiTrash2, FiUserX, FiCheck, FiX, FiUserPlus } from 'react-icons/fi';
+import { FiUsers, FiLogOut, FiTrash2, FiUserX, FiCheck, FiX, FiUserPlus, FiLink, FiCheckCircle } from 'react-icons/fi';
 
 const GroupsPage = () => {
     const navigate = useNavigate();
@@ -11,10 +11,11 @@ const GroupsPage = () => {
     const [members, setMembers] = useState([]);
     const [pendingMembers, setPendingMembers] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [switching, setSwitching] = useState(false);
     const [error, setError] = useState('');
+    const [copiedGroupId, setCopiedGroupId] = useState(null);
 
     useEffect(() => {
-        // Fetch groups when component mounts
         if (fetchGroups) {
             fetchGroups();
         }
@@ -25,7 +26,6 @@ const GroupsPage = () => {
             setSelectedGroup(currentGroup);
             loadGroupDetails(currentGroup.id);
         } else if (groups && groups.length > 0) {
-            // If no current group but groups exist, select the first one
             setSelectedGroup(groups[0]);
             loadGroupDetails(groups[0].id);
         }
@@ -59,6 +59,8 @@ const GroupsPage = () => {
                     const pendingData = await pendingResponse.json();
                     setPendingMembers(pendingData);
                 }
+            } else {
+                setPendingMembers([]);
             }
         } catch (err) {
             setError('Failed to load group details');
@@ -68,14 +70,33 @@ const GroupsPage = () => {
         }
     };
 
-    const handleSwitchGroup = async (groupId) => {
+    const handleSwitchGroup = async (group) => {
+        // 1. 이미 현재 그룹이면 무시
+        if (currentGroup?.id === group.id) return;
+
+        // 2. 로딩 즉시 표시
+        setSwitching(true);
+        setError('');
         try {
-            await switchGroup(groupId);
-            const newGroup = groups.find(g => g.id === groupId);
-            setSelectedGroup(newGroup);
-            loadGroupDetails(groupId);
+            await switchGroup(group.id);
+            setSelectedGroup(group);
+            await loadGroupDetails(group.id);
         } catch (err) {
             setError('Failed to switch group');
+        } finally {
+            setSwitching(false);
+        }
+    };
+
+    const handleCopyInviteLink = async (group) => {
+        const inviteUrl = `${window.location.origin}/join/${group.invite_code}`;
+        try {
+            await navigator.clipboard.writeText(inviteUrl);
+            setCopiedGroupId(group.id);
+            setTimeout(() => setCopiedGroupId(null), 2000);
+        } catch {
+            // fallback
+            prompt('Copy this invite link:', inviteUrl);
         }
     };
 
@@ -187,6 +208,19 @@ const GroupsPage = () => {
                 </div>
             )}
 
+            {/* Global switching overlay */}
+            {switching && (
+                <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl p-6 flex items-center gap-4 shadow-xl">
+                        <svg className="animate-spin h-6 w-6 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        </svg>
+                        <span className="text-gray-700 font-medium">Switching group...</span>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Group List */}
                 <div className="lg:col-span-1">
@@ -207,26 +241,37 @@ const GroupsPage = () => {
                                     </button>
                                 </div>
                             ) : (
-                                groups.map((group) => (
-                                    <button
-                                        key={group.id}
-                                        onClick={() => handleSwitchGroup(group.id)}
-                                        className={`w-full p-4 rounded-lg text-left transition ${selectedGroup?.id === group.id
-                                            ? 'bg-indigo-50 border-2 border-indigo-500'
-                                            : 'bg-gray-50 border-2 border-transparent hover:border-gray-300'
-                                            }`}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <p className="font-semibold text-gray-800">{group.name}</p>
-                                                <p className="text-xs text-gray-500">Code: {group.invite_code}</p>
-                                            </div>
-                                            {group.role === 'OWNER' && (
-                                                <span className="text-xs font-medium px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">Owner</span>
-                                            )}
+                                groups.map((group) => {
+                                    const isCurrentGroup = currentGroup?.id === group.id;
+                                    const isSelected = selectedGroup?.id === group.id;
+                                    return (
+                                        <div key={group.id} className="relative">
+                                            <button
+                                                onClick={() => handleSwitchGroup(group)}
+                                                disabled={isCurrentGroup}
+                                                className={`w-full p-4 rounded-lg text-left transition ${isSelected
+                                                    ? 'bg-indigo-50 border-2 border-indigo-500'
+                                                    : 'bg-gray-50 border-2 border-transparent hover:border-gray-300'
+                                                    } ${isCurrentGroup ? 'cursor-default' : ''}`}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-semibold text-gray-800 truncate">{group.name}</p>
+                                                        <p className="text-xs text-gray-500">Code: {group.invite_code}</p>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1 ml-2 shrink-0">
+                                                        {group.role === 'OWNER' && (
+                                                            <span className="text-xs font-medium px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">Owner</span>
+                                                        )}
+                                                        {isCurrentGroup && (
+                                                            <span className="text-xs font-medium px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Active</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </button>
                                         </div>
-                                    </button>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     </div>
@@ -238,12 +283,24 @@ const GroupsPage = () => {
                         <div className="space-y-6">
                             {/* Group Info */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div>
+                                <div className="flex items-start justify-between mb-4 gap-4">
+                                    <div className="flex-1 min-w-0">
                                         <h2 className="text-2xl font-bold text-gray-800">{selectedGroup.name}</h2>
-                                        <p className="text-sm text-gray-500">Invite Code: <span className="font-mono font-bold text-indigo-600">{selectedGroup.invite_code}</span></p>
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            Invite Code: <span className="font-mono font-bold text-indigo-600">{selectedGroup.invite_code}</span>
+                                        </p>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 flex-wrap justify-end">
+                                        {/* 초대 링크 복사 버튼 */}
+                                        <button
+                                            onClick={() => handleCopyInviteLink(selectedGroup)}
+                                            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition"
+                                        >
+                                            {copiedGroupId === selectedGroup.id
+                                                ? <><FiCheckCircle /> Copied!</>
+                                                : <><FiLink /> Copy Invite Link</>
+                                            }
+                                        </button>
                                         {currentUserRole === 'OWNER' ? (
                                             <button
                                                 onClick={() => handleDeleteGroup(selectedGroup.id)}

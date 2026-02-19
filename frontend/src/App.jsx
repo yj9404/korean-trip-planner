@@ -20,6 +20,7 @@ import ProfilePage from './pages/ProfilePage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
 import GroupsPage from './pages/GroupsPage';
 import MenuScanPage from './pages/MenuScanPage';
+import JoinGroupPage from './pages/JoinGroupPage';
 
 // Components
 import Layout from './components/Layout';
@@ -98,6 +99,7 @@ function App() {
                 {/* Onboarding Logic: user logged in but no group */}
                 {user && hasGroup === false ? (
                     <Routes>
+                        <Route path="/join/:inviteCode" element={<JoinGroupPage />} />
                         <Route
                             path="*"
                             element={
@@ -117,6 +119,8 @@ function App() {
                             path="/login"
                             element={user ? <Navigate to="/dashboard" /> : <LoginPage />}
                         />
+                        {/* 초대 링크 - 로그인 여부 무관하게 JoinGroupPage가 내부적으로 처리 */}
+                        <Route path="/join/:inviteCode" element={<JoinGroupPage />} />
 
                         {/* Protected Routes */}
                         <Route

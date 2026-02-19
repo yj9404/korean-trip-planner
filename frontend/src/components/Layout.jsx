@@ -22,14 +22,18 @@ const Layout = ({ children, user, fullWidth = false }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [aiMenuOpen, setAiMenuOpen] = useState(false);
     const [mobileAiMenuOpen, setMobileAiMenuOpen] = useState(false);
+    const [userMenuOpen, setUserMenuOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
 
-    // Close AI menu when clicking outside
+    // Close dropdown menus when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (!event.target.closest('.ai-dropdown-container')) {
                 setAiMenuOpen(false);
+            }
+            if (!event.target.closest('.user-dropdown-container')) {
+                setUserMenuOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -89,7 +93,6 @@ const Layout = ({ children, user, fullWidth = false }) => {
             ]
         },
         { path: '/groups', label: 'Groups', icon: FiUsers },
-        { path: '/profile', label: 'Profile', icon: FiUser },
     ];
 
     return (
@@ -170,23 +173,50 @@ const Layout = ({ children, user, fullWidth = false }) => {
                             })}
                         </nav>
 
-                        {/* User Menu */}
-                        <div className="flex items-center space-x-4">
-                            <div className="hidden sm:block text-right">
-                                <p className="text-sm font-medium text-gray-900">
-                                    {user?.displayName || user?.email}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                    {user?.email}
-                                </p>
+                        {/* User Dropdown */}
+                        <div className="flex items-center space-x-2">
+                            {/* Desktop: 이름 클릭 시 드롭다운 */}
+                            <div className="relative user-dropdown-container hidden md:block">
+                                <button
+                                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors hover:bg-gray-100 ${userMenuOpen ? 'bg-gray-100' : ''}`}
+                                >
+                                    <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                                        {(user?.displayName || user?.email || '?')[0].toUpperCase()}
+                                    </div>
+                                    <div className="text-left hidden lg:block">
+                                        <p className="text-sm font-medium text-gray-900 leading-tight">
+                                            {user?.displayName || user?.email}
+                                        </p>
+                                    </div>
+                                    <FiChevronDown className={`text-gray-500 transition-transform duration-200 ${userMenuOpen ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {userMenuOpen && (
+                                    <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                                        <div className="px-4 py-2 border-b border-gray-100 mb-1">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Account</p>
+                                            <p className="text-sm text-gray-700 truncate mt-0.5">{user?.email}</p>
+                                        </div>
+                                        <Link
+                                            to="/profile"
+                                            onClick={() => setUserMenuOpen(false)}
+                                            className={`flex items-center space-x-3 px-4 py-2.5 hover:bg-gray-50 transition-colors ${location.pathname === '/profile' ? 'text-primary-700 font-medium bg-primary-50' : 'text-gray-700'
+                                                }`}
+                                        >
+                                            <FiUser className="text-lg" />
+                                            <span>Profile</span>
+                                        </Link>
+                                        <button
+                                            onClick={() => { setUserMenuOpen(false); handleLogout(); }}
+                                            className="w-full flex items-center space-x-3 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors"
+                                        >
+                                            <FiLogOut className="text-lg" />
+                                            <span>Logout</span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                            <button
-                                onClick={handleLogout}
-                                className="hidden md:flex items-center space-x-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                                <FiLogOut />
-                                <span>Logout</span>
-                            </button>
 
                             {/* Mobile Menu Button */}
                             <button
@@ -263,13 +293,27 @@ const Layout = ({ children, user, fullWidth = false }) => {
                                     </Link>
                                 );
                             })}
-                            <button
-                                onClick={handleLogout}
-                                className="w-full flex items-center space-x-3 px-4 py-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                                <FiLogOut className="text-xl" />
-                                <span>Logout</span>
-                            </button>
+                            {/* Mobile: 구분선 + Profile / Logout */}
+                            <div className="border-t border-gray-100 mt-2 pt-2 space-y-1">
+                                <Link
+                                    to="/profile"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${location.pathname === '/profile'
+                                            ? 'bg-primary-50 text-primary-700 font-medium'
+                                            : 'text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                >
+                                    <FiUser className="text-xl" />
+                                    <span>Profile</span>
+                                </Link>
+                                <button
+                                    onClick={handleLogout}
+                                    className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                    <FiLogOut className="text-xl" />
+                                    <span>Logout</span>
+                                </button>
+                            </div>
                         </nav>
                     </div>
                 )}

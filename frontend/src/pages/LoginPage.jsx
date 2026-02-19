@@ -25,6 +25,16 @@ const LoginPage = () => {
     const [googleUser, setGoogleUser] = useState(null);
     const navigate = useNavigate();
 
+    // 로그인 성공 후 이동할 대상 결정 (pendingInviteCode 우선)
+    const getPostLoginRedirect = () => {
+        const code = sessionStorage.getItem('pendingInviteCode');
+        if (code) {
+            sessionStorage.removeItem('pendingInviteCode');
+            return `/join/${code}`;
+        }
+        return '/dashboard';
+    };
+
     const saveUserPreferences = async (userId, displayName, korean, english, lang) => {
         try {
             await setDoc(doc(db, 'user_preferences', userId), {
@@ -49,7 +59,7 @@ const LoginPage = () => {
         try {
             if (isLogin) {
                 await signInWithEmailAndPassword(auth, email, password);
-                navigate('/dashboard');
+                navigate(getPostLoginRedirect());
             } else {
                 // Validate signup fields
                 if (!englishName.trim()) {
@@ -68,7 +78,7 @@ const LoginPage = () => {
                 // Save preferences to Firestore
                 await saveUserPreferences(user.uid, displayName, koreanName, englishName, preferredLang);
 
-                navigate('/dashboard');
+                navigate(getPostLoginRedirect());
             }
         } catch (err) {
             setError(err.message);
@@ -94,8 +104,8 @@ const LoginPage = () => {
 
                 // Check if mandatory fields are present (English name is mandatory)
                 if (data.english_name) {
-                    // Existing user with complete profile -> Dashboard
-                    navigate('/dashboard');
+                    // Existing user with complete profile -> Dashboard or pending invite
+                    navigate(getPostLoginRedirect());
                 } else {
                     // Existing user but incomplete profile -> Profile Setup
                     // Pre-fill existing data if available
@@ -141,7 +151,7 @@ const LoginPage = () => {
             await updateProfile(googleUser, { displayName });
             await saveUserPreferences(googleUser.uid, displayName, koreanName, englishName, preferredLang);
 
-            navigate('/dashboard');
+            navigate(getPostLoginRedirect());
         } catch (err) {
             setError(err.message);
         } finally {
