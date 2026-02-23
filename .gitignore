@@ -55,3 +55,6 @@ htmlcov/
 # Cache
 .cache/
 .pytest_cache/
+
+# Uploads
+backend/uploads/

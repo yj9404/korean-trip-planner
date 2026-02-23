@@ -17,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from app.config import settings
-from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups, menu
+from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups, menu, media
 from app.services.firebase_service import firebase_service
 
 
@@ -70,6 +70,7 @@ app.include_router(chat.router, prefix=f"/api/{settings.api_version}", tags=["Ch
 app.include_router(itinerary.router, tags=["Itinerary"])
 app.include_router(places.router, prefix="/api/v1", tags=["Places"])
 app.include_router(menu.router, prefix="/api/v1", tags=["Menu"])
+app.include_router(media.router, prefix="/api/v1", tags=["Media"])
 
 
 @app.get("/")

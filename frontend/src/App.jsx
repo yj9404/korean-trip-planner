@@ -21,6 +21,7 @@ import CompleteProfilePage from './pages/CompleteProfilePage';
 import GroupsPage from './pages/GroupsPage';
 import MenuScanPage from './pages/MenuScanPage';
 import JoinGroupPage from './pages/JoinGroupPage';
+import GalleryPage from './pages/GalleryPage';
 
 // Components
 import Layout from './components/Layout';
@@ -224,6 +225,19 @@ function App() {
                                 user ? (
                                     <Layout user={user}>
                                         <MenuScanPage user={user} />
+                                    </Layout>
+                                ) : (
+                                    <Navigate to="/login" />
+                                )
+                            }
+                        />
+
+                        <Route
+                            path="/gallery"
+                            element={
+                                user ? (
+                                    <Layout user={user}>
+                                        <GalleryPage user={user} />
                                     </Layout>
                                 ) : (
                                     <Navigate to="/login" />

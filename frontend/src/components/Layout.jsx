@@ -15,7 +15,8 @@ import {
     FiX,
     FiLogOut,
     FiCamera,
-    FiChevronDown
+    FiChevronDown,
+    FiImage
 } from 'react-icons/fi';
 
 const Layout = ({ children, user, fullWidth = false }) => {
@@ -82,6 +83,7 @@ const Layout = ({ children, user, fullWidth = false }) => {
         { path: '/dashboard', label: 'Dashboard', icon: FiHome },
         { path: '/itinerary', label: 'Itinerary', icon: FiMapPin },
         { path: '/chat', label: 'Chat', icon: FiMessageSquare },
+        { path: '/gallery', label: 'Gallery', icon: FiImage },
         {
             key: 'ai-tools',
             label: 'AI Tools',
@@ -299,8 +301,8 @@ const Layout = ({ children, user, fullWidth = false }) => {
                                     to="/profile"
                                     onClick={() => setMobileMenuOpen(false)}
                                     className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${location.pathname === '/profile'
-                                            ? 'bg-primary-50 text-primary-700 font-medium'
-                                            : 'text-gray-600 hover:bg-gray-100'
+                                        ? 'bg-primary-50 text-primary-700 font-medium'
+                                        : 'text-gray-600 hover:bg-gray-100'
                                         }`}
                                 >
                                     <FiUser className="text-xl" />

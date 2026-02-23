@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     naver_client_id: str | None = None
     naver_client_secret: str | None = None
 
+    # Google Drive
+    google_drive_folder_id: str | None = None
+
 
     
     # Firebase - supports both methods
@@ -29,6 +32,11 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
     
+    # OAuth 2.0 (for personal Gmail drive upload)
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_refresh_token: str | None = None
+
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
@@ -47,3 +55,8 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+if settings.google_drive_folder_id:
+    print(f"📂 Google Drive Folder ID Loaded: {settings.google_drive_folder_id}")
+else:
+    print("⚠️ Google Drive Folder ID NOT SET")
