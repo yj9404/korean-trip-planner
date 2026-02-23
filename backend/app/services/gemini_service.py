@@ -169,9 +169,7 @@ Only provide the translation, no explanations.
 
 Translation:"""
         
-        try:
-            logger.info(f"Translate Request: {text}, {source_lang} -> {target_lang}")
-            
+        try:            
             response = await self.client.aio.models.generate_content(
                 model=FLASH_LITE,
                 contents=prompt
@@ -188,7 +186,6 @@ Translation:"""
                     raw = raw[len(prefix):].strip()
                     break
             
-            logger.info(f"Translation successful: '{raw[:50]}...'")
             return raw
         except Exception as e:
             logger.error(f"Gemini translation error: {type(e).__name__}: {str(e)}")

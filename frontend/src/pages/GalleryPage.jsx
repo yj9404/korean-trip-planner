@@ -247,56 +247,61 @@ const GalleryPage = ({ user }) => {
                         }
                     </p>
                 </div>
-                <div className="flex items-center space-x-2">
-                    {selectMode ? (
-                        <>
-                            <button
-                                onClick={exitSelectMode}
-                                className="px-4 py-2.5 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium"
-                                disabled={deleting}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleDeleteSelected}
-                                disabled={!selectedIds.size || deleting}
-                                className="flex items-center space-x-2 px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-sm disabled:opacity-50 text-sm font-medium"
-                            >
-                                {deleting ? (
-                                    <FiLoader className="animate-spin" />
-                                ) : (
-                                    <FiTrash2 />
-                                )}
-                                <span>Delete {selectedIds.size > 0 ? selectedIds.size : ''}</span>
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            {media.length > 0 && (
+                <div className="flex flex-col items-end">
+                    <div className="flex items-center space-x-2">
+                        {selectMode ? (
+                            <>
                                 <button
-                                    onClick={() => setSelectMode(true)}
+                                    onClick={exitSelectMode}
                                     className="px-4 py-2.5 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium"
+                                    disabled={deleting}
                                 >
-                                    Select
+                                    Cancel
                                 </button>
-                            )}
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center space-x-2 px-5 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors shadow-sm"
-                            >
-                                <FiPlus className="text-lg" />
-                                <span className="font-medium">Upload</span>
-                            </button>
-                        </>
+                                <button
+                                    onClick={handleDeleteSelected}
+                                    disabled={!selectedIds.size || deleting}
+                                    className="flex items-center space-x-2 px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-sm disabled:opacity-50 text-sm font-medium"
+                                >
+                                    {deleting ? (
+                                        <FiLoader className="animate-spin" />
+                                    ) : (
+                                        <FiTrash2 />
+                                    )}
+                                    <span>Delete {selectedIds.size > 0 ? selectedIds.size : ''}</span>
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                {media.length > 0 && (
+                                    <button
+                                        onClick={() => setSelectMode(true)}
+                                        className="px-4 py-2.5 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium"
+                                    >
+                                        Select
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex items-center space-x-2 px-5 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors shadow-sm"
+                                >
+                                    <FiPlus className="text-lg" />
+                                    <span className="font-medium">Upload</span>
+                                </button>
+                            </>
+                        )}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={handleFileSelect}
+                        />
+                    </div>
+                    {!selectMode && (
+                        <p className="text-xs text-gray-400 mt-1 mr-1 text-right">Max 30 files per upload</p>
                     )}
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        multiple
-                        accept="image/*,video/*"
-                        className="hidden"
-                        onChange={handleFileSelect}
-                    />
                 </div>
             </div>
 
