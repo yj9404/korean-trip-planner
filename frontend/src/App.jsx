@@ -118,7 +118,17 @@ function App() {
                         <Route path="/" element={<LandingPage />} />
                         <Route
                             path="/login"
-                            element={user ? <Navigate to="/dashboard" /> : <LoginPage />}
+                            element={
+                                user ? (
+                                    sessionStorage.getItem('pendingInviteCode') ? (
+                                        <Navigate to={`/join/${sessionStorage.getItem('pendingInviteCode')}`} replace />
+                                    ) : (
+                                        <Navigate to="/dashboard" replace />
+                                    )
+                                ) : (
+                                    <LoginPage />
+                                )
+                            }
                         />
                         {/* 초대 링크 - 로그인 여부 무관하게 JoinGroupPage가 내부적으로 처리 */}
                         <Route path="/join/:inviteCode" element={<JoinGroupPage />} />
@@ -128,9 +138,13 @@ function App() {
                             path="/dashboard"
                             element={
                                 user ? (
-                                    <Layout user={user}>
-                                        <DashboardPage user={user} />
-                                    </Layout>
+                                    sessionStorage.getItem('pendingInviteCode') ? (
+                                        <Navigate to={`/join/${sessionStorage.getItem('pendingInviteCode')}`} replace />
+                                    ) : (
+                                        <Layout user={user}>
+                                            <DashboardPage user={user} />
+                                        </Layout>
+                                    )
                                 ) : (
                                     <Navigate to="/login" />
                                 )

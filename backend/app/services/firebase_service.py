@@ -379,14 +379,33 @@ class FirebaseService:
         """Get all pending members for a group (OWNER only should call)"""
         members = []
         try:
-            # Query by single field to avoid composite index requirement
             docs = self.db.collection("group_members").where("group_id", "==", group_id).stream()
             for doc in docs:
                 data = doc.to_dict()
                 # Filter PENDING status in Python
-                if data.get("status") == "PENDING":
-                    data["id"] = doc.id
-                    members.append(data)
+                if data.get("status") != "PENDING":
+                    continue
+
+                user_id = data.get("user_id")
+
+                # Fetch display name from user_preferences (same as get_group_members)
+                display_name = user_id  # fallback to uid
+                try:
+                    prefs_doc = self.db.collection("user_preferences").document(user_id).get()
+                    if prefs_doc.exists:
+                        prefs = prefs_doc.to_dict()
+                        display_name = prefs.get("english_name") or prefs.get("display_name") or user_id
+                except Exception:
+                    pass
+
+                members.append({
+                    "id": doc.id,
+                    "user_id": user_id,
+                    "display_name": display_name,
+                    "role": data.get("role"),
+                    "joined_at": data.get("joined_at"),
+                    "status": data.get("status")
+                })
         except Exception as e:
             print(f"Error getting pending members: {e}")
         return members

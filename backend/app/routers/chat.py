@@ -114,16 +114,28 @@ async def send_message(room_id: str, message_data: ChatMessageCreate):
         raise HTTPException(status_code=404, detail="Chat room not found")
     
     try:
-        # Send the user message
+        # 1. Translate message before saving
+        source_lang = message_data.original_lang
+        target_lang = "en" if source_lang == "ko" else "ko"
+        
+        translated_text = None
+        try:
+            translated_text = await gemini_service.translate_message(message_data.text, source_lang, target_lang)
+        except Exception as e:
+            logger.error(f"Failed to pre-translate message: {e}")
+            # Even if translation fails, we still want to save the original message
+        
+        # 2. Send the user message
         message_dict = message_data.model_dump()
         message_dict["room_id"] = room_id
         message_dict["is_ai_bot"] = False
+        message_dict["translated_text"] = translated_text
         
         message_id = await firebase_service.send_message(room_id, message_dict)
         message_dict["id"] = message_id
         message_dict["timestamp"] = datetime.utcnow()
         
-        # Check for keywords and trigger AI bot if enabled
+        # 3. Check for keywords and trigger AI bot if enabled
         keywords = gemini_service.detect_keywords(message_data.text)
         
         if keywords:
@@ -136,7 +148,7 @@ async def send_message(room_id: str, message_data: ChatMessageCreate):
                 explanation = await gemini_service.generate_explanation(
                     keyword=keyword,
                     context=message_data.text,
-                    language=message_data.original_lang
+                    language=source_lang
                 )
                 
                 # Send AI bot message

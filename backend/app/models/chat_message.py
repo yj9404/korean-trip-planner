@@ -14,6 +14,7 @@ class ChatMessage(BaseModel):
     sender_name: str
     text: str
     original_lang: str = Field(..., pattern="^(ko|en)$", description="Language code: ko or en")
+    translated_text: Optional[str] = None
     timestamp: Optional[datetime] = None
     is_ai_bot: bool = False
 
@@ -34,5 +35,6 @@ class ChatMessageResponse(BaseModel):
     sender_name: str
     text: str
     original_lang: str
+    translated_text: Optional[str] = None
     timestamp: datetime
     is_ai_bot: bool

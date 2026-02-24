@@ -15,8 +15,7 @@ build/
 .env
 .env.local
 .env.*.local
-.env.yaml
-.env.production
+backend/env.yaml
 
 # Firebase
 firebase-credentials.json
@@ -32,6 +31,7 @@ yarn-error.log*
 frontend/build/
 frontend/.env
 frontend/.env.local
+frontend/.env.production
 
 # IDE
 .vscode/

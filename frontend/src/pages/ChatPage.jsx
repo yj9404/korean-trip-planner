@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FiSend, FiMessageCircle, FiMessageSquare } from 'react-icons/fi';
+import { FiSend, FiMessageCircle, FiMessageSquare, FiArrowDown } from 'react-icons/fi';
 import ChatBubble from '../components/ChatBubble';
 import Loading from '../components/Loading';
 import {
@@ -23,9 +23,13 @@ const ChatPage = ({ user }) => {
         preferred_lang: 'en',
         ai_bot_enabled: true
     });
-    const [translations, setTranslations] = useState({});
     const [showTranslations, setShowTranslations] = useState({});
+    const [showNewMessageBtn, setShowNewMessageBtn] = useState(false);
+
     const messagesEndRef = useRef(null);
+    const chatContainerRef = useRef(null);
+    const inputRef = useRef(null);
+    const prevMessagesLengthRef = useRef(0);
 
     // Load user preferences
     useEffect(() => {
@@ -84,7 +88,6 @@ const ChatPage = ({ user }) => {
             currentRoomId,
             (newMessages) => {
                 setMessages(newMessages);
-                scrollToBottom();
             },
             (error) => {
                 console.error('Message subscription error:', error);
@@ -94,42 +97,42 @@ const ChatPage = ({ user }) => {
         return () => unsubscribe();
     }, [currentRoomId]);
 
-    // Auto-translate messages (batch update so we don't overwrite previous translations)
+    // Smart scroll logic for new messages
     useEffect(() => {
-        const translateMessages = async () => {
-            const updates = {};
-            for (const msg of messages) {
-                if (msg.is_ai_bot || !msg.original_lang) continue;
-                if (msg.original_lang === preferences.preferred_lang) continue;
-                if (translations[msg.id]) continue; // 이미 번역된 메시지는 스킵
+        if (messages.length > prevMessagesLengthRef.current) {
+            const lastMsg = messages[messages.length - 1];
+            const isMyMessage = lastMsg?.sender_id === user.uid;
 
-                try {
-                    const result = await translateMessage(
-                        msg.text,
-                        msg.original_lang,
-                        preferences.preferred_lang
-                    );
-                    const translated = result?.translated?.trim();
-
-                    if (translated) {
-                        updates[msg.id] = translated;
-                    }
-                } catch (error) {
-                    console.error('Translation error:', error);
-                }
+            let isNearBottom = true;
+            if (chatContainerRef.current) {
+                const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+                isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
             }
-            if (Object.keys(updates).length > 0) {
-                setTranslations(prev => ({ ...prev, ...updates }));
-            }
-        };
 
-        if (messages.length > 0) {
-            translateMessages();
+            if (isMyMessage || isNearBottom || prevMessagesLengthRef.current === 0) {
+                // Use setTimeout to ensure DOM has updated with the new message
+                setTimeout(() => {
+                    scrollToBottom();
+                    setShowNewMessageBtn(false);
+                }, 100);
+            } else {
+                setShowNewMessageBtn(true);
+            }
         }
-    }, [messages, preferences.preferred_lang]);
+        prevMessagesLengthRef.current = messages.length;
+    }, [messages, user.uid]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    const handleScroll = () => {
+        if (!chatContainerRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+        if (isNearBottom) {
+            setShowNewMessageBtn(false);
+        }
     };
 
     const handleSendMessage = async (e) => {
@@ -156,6 +159,10 @@ const ChatPage = ({ user }) => {
             alert('Failed to send message. Please try again.');
         } finally {
             setSending(false);
+            // Re-focus input after sending (or attempting to send)
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 10);
         }
     };
 
@@ -214,9 +221,13 @@ const ChatPage = ({ user }) => {
             </div>
 
             {/* Chat Container */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col" style={{ height: '600px' }}>
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col relative" style={{ height: '600px' }}>
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-2">
+                <div
+                    ref={chatContainerRef}
+                    onScroll={handleScroll}
+                    className="flex-1 overflow-y-auto p-6 space-y-2 relative"
+                >
                     {messages.length === 0 ? (
                         <div className="flex items-center justify-center h-full text-gray-400">
                             <div className="text-center">
@@ -230,7 +241,7 @@ const ChatPage = ({ user }) => {
                                 key={msg.id}
                                 message={msg}
                                 isOwnMessage={msg.sender_id === user.uid}
-                                translatedText={translations[msg.id]}
+                                translatedText={msg.original_lang !== preferences.preferred_lang ? msg.translated_text : null}
                                 showTranslation={showTranslations[msg.id]}
                                 onToggleTranslation={() => toggleTranslation(msg.id)}
                             />
@@ -239,10 +250,27 @@ const ChatPage = ({ user }) => {
                     <div ref={messagesEndRef} />
                 </div>
 
+                {/* New Message Button */}
+                {showNewMessageBtn && (
+                    <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-10">
+                        <button
+                            onClick={() => {
+                                scrollToBottom();
+                                setShowNewMessageBtn(false);
+                            }}
+                            className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-full shadow-lg flex items-center space-x-2 transition-all transform hover:scale-105"
+                        >
+                            <span className="text-sm font-medium">New message</span>
+                            <FiArrowDown />
+                        </button>
+                    </div>
+                )}
+
                 {/* Input Area */}
                 <div className="border-t border-gray-200 p-4 bg-gray-50">
-                    <form onSubmit={handleSendMessage} className="flex items-center space-x-3">
+                    <form onSubmit={handleSendMessage} className="flex items-center space-x-3 mb-2">
                         <input
+                            ref={inputRef}
                             type="text"
                             value={newMessage}
                             onChange={(e) => setNewMessage(e.target.value)}
@@ -259,6 +287,10 @@ const ChatPage = ({ user }) => {
                             <span>{sending ? 'Sending...' : 'Send'}</span>
                         </button>
                     </form>
+                    <div className="text-xs text-gray-400 text-center flex flex-col items-center justify-center">
+                        <p>💡 번역 기능으로 인해 메시지 전송에 몇 초 정도 소요될 수 있습니다.</p>
+                        <p>Translation is in progress, so it may take a few seconds to send.</p>
+                    </div>
                 </div>
             </div>
         </div>

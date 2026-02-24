@@ -31,19 +31,17 @@ async def get_current_group(current_user: dict = Depends(get_current_user)) -> s
     preferences = await firebase_service.get_user_preferences(user_id)
     current_group_id = preferences.get("current_group_id")
     
-    if not current_group_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No group selected. Please select or create a group first."
-        )
-    
-    # Verify user has ACTIVE access to this group
-    has_access = await firebase_service.check_user_group_access(user_id, current_group_id)
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to access this group."
-        )
+    if not current_group_id or not await firebase_service.check_user_group_access(user_id, current_group_id):
+        # Auto-fallback to the first available group
+        groups = await firebase_service.get_user_groups(user_id)
+        if groups:
+            current_group_id = groups[0]["id"]
+            await firebase_service.update_user_preferences(user_id, {"current_group_id": current_group_id})
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access any groups."
+            )
     
     return current_group_id
 

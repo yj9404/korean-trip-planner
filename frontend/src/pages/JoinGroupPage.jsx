@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { auth } from '../services/firebase';
 import { FiUsers, FiLoader } from 'react-icons/fi';
@@ -15,6 +15,7 @@ const JoinGroupPage = () => {
     const [status, setStatus] = useState('loading'); // 'loading' | 'joining' | 'success' | 'error'
     const [message, setMessage] = useState('');
     const [groupName, setGroupName] = useState('');
+    const joinAttempted = useRef(false);
 
     useEffect(() => {
         const handleJoin = async () => {
@@ -26,6 +27,10 @@ const JoinGroupPage = () => {
                 navigate('/login', { replace: true });
                 return;
             }
+
+            // StrictMode 중복 방지
+            if (joinAttempted.current) return;
+            joinAttempted.current = true;
 
             // 로그인 상태: 즉시 join 시도
             setStatus('joining');
@@ -60,9 +65,10 @@ const JoinGroupPage = () => {
 
         // auth 상태가 확정된 후에 실행 (Firebase 초기화 대기)
         const unsubscribe = auth.onAuthStateChanged(() => {
-            unsubscribe();
             handleJoin();
         });
+
+        return () => unsubscribe();
     }, [inviteCode, navigate]);
 
     return (
