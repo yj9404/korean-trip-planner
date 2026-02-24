@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FiMap, FiMessageSquare, FiCompass, FiGlobe, FiRefreshCw, FiDollarSign } from 'react-icons/fi';
+import { FiMap, FiMessageSquare, FiCompass, FiGlobe, FiRefreshCw, FiDollarSign, FiImage, FiCamera } from 'react-icons/fi';
 
 // KRW → USD Currency Calculator
 const CurrencyCalculator = () => {
@@ -17,7 +17,7 @@ const CurrencyCalculator = () => {
             const res = await fetch('https://open.er-api.com/v6/latest/USD');
             const data = await res.json();
             if (data.result === 'success') {
-                setRate(data.rates.KRW); // KRW per 1 USD
+                setRate(data.rates.KRW);
                 setLastUpdated(new Date().toLocaleTimeString());
             } else {
                 setError(true);
@@ -35,7 +35,6 @@ const CurrencyCalculator = () => {
     const displayUsd = usd && !isNaN(usd) ? parseFloat(usd).toLocaleString('en-US', { minimumFractionDigits: 2 }) : null;
 
     const handleInput = (e) => {
-        // Allow digits and commas only
         const raw = e.target.value.replace(/[^0-9]/g, '');
         setKrw(raw ? parseInt(raw, 10).toLocaleString('ko-KR') : '');
     };
@@ -67,7 +66,6 @@ const CurrencyCalculator = () => {
             ) : (
                 <>
                     <div className="flex items-center gap-3">
-                        {/* KRW Input */}
                         <div className="flex-1 relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">₩</span>
                             <input
@@ -79,10 +77,7 @@ const CurrencyCalculator = () => {
                                 className="w-full pl-8 pr-3 py-3 bg-gray-50 border border-gray-200 rounded-xl text-right text-lg font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
                             />
                         </div>
-
                         <span className="text-gray-400 font-bold text-lg shrink-0">=</span>
-
-                        {/* USD Result */}
                         <div className="flex-1 relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
                             <div className="w-full pl-8 pr-3 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-right text-lg font-bold text-emerald-700">
@@ -94,7 +89,6 @@ const CurrencyCalculator = () => {
                             </div>
                         </div>
                     </div>
-
                     {rate && !loading && (
                         <p className="text-xs text-gray-400 mt-2 text-right">
                             1 USD = ₩{Math.round(rate).toLocaleString('ko-KR')} &nbsp;·&nbsp; Updated {lastUpdated}
@@ -112,30 +106,44 @@ const DashboardPage = ({ user }) => {
             to: '/itinerary',
             icon: FiMap,
             label: 'Itinerary',
-            description: 'View and manage your travel plan',
+            description: 'Day-by-day trip schedule with drag & drop reordering',
             color: 'from-blue-500 to-cyan-500'
         },
         {
             to: '/chat',
             icon: FiMessageSquare,
             label: 'Group Chat',
-            description: 'Chat with family & AI assistant',
+            description: 'Real-time chat with live Korean ↔ English translation',
             color: 'from-purple-500 to-pink-500'
+        },
+        {
+            to: '/gallery',
+            icon: FiImage,
+            label: 'Gallery',
+            description: 'Shared photo & video album for the whole family',
+            color: 'from-rose-500 to-pink-500'
         },
         {
             to: '/ai-guide',
             icon: FiCompass,
             label: 'AI Guide',
-            description: 'Get instant travel recommendations',
+            description: 'Instant travel recommendations powered by Gemini AI',
             color: 'from-amber-500 to-orange-500'
         },
         {
             to: '/translate',
             icon: FiGlobe,
             label: 'Translation',
-            description: 'Real-time Korean-English translation',
+            description: 'Real-time Korean ↔ English text translation',
             color: 'from-green-500 to-emerald-500'
-        }
+        },
+        {
+            to: '/menu-scan',
+            icon: FiCamera,
+            label: 'Menu Scan',
+            description: 'Scan Korean menus and get instant English translations',
+            color: 'from-indigo-500 to-purple-500'
+        },
     ];
 
     return (

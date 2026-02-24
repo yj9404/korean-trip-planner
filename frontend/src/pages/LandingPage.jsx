@@ -1,34 +1,46 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiMap, FiGlobe, FiCompass, FiUsers, FiArrowRight } from 'react-icons/fi';
+import { FiMap, FiGlobe, FiCompass, FiUsers, FiImage, FiCamera, FiArrowRight } from 'react-icons/fi';
 
 const LandingPage = () => {
     const navigate = useNavigate();
 
     const features = [
         {
+            icon: FiMap,
+            title: 'Smart Itinerary',
+            description: 'Plan and organise your Korea trip day-by-day. Drag & drop to reorder places, get AI descriptions, and navigate directly via Naver Maps.',
+            color: 'from-blue-500 to-cyan-500',
+        },
+        {
             icon: FiGlobe,
             title: 'Real-time Translation',
-            description: 'Communicate seamlessly with AI-powered translation between Korean and English',
-            color: 'from-blue-500 to-cyan-500',
+            description: 'Communicate seamlessly with AI-powered Korean ↔ English translation in the group chat and standalone translator.',
+            color: 'from-green-500 to-emerald-500',
+        },
+        {
+            icon: FiImage,
+            title: 'Shared Gallery',
+            description: 'A shared photo & video album for the whole family. Upload, browse, and auto-backup to Google Drive — all in one place.',
+            color: 'from-rose-500 to-pink-500',
+        },
+        {
+            icon: FiCamera,
+            title: 'Menu Scanner',
+            description: 'Point your camera at any Korean menu and instantly get English translations and descriptions powered by Gemini AI.',
+            color: 'from-indigo-500 to-purple-500',
         },
         {
             icon: FiCompass,
             title: 'AI Travel Guide',
-            description: 'Get personalized recommendations and insider tips from our AI assistant',
-            color: 'from-purple-500 to-pink-500',
-        },
-        {
-            icon: FiMap,
-            title: 'Trip Planning',
-            description: 'Plan and organize your Korea adventure with collaborative tools',
-            color: 'from-green-500 to-emerald-500',
+            description: 'Get personalised travel recommendations, local tips, and cultural insights from our Gemini-powered AI assistant.',
+            color: 'from-amber-500 to-orange-500',
         },
         {
             icon: FiUsers,
-            title: 'Family Sharing',
-            description: 'Share itineraries and collaborate with family members in real-time',
-            color: 'from-orange-500 to-red-500',
+            title: 'Family Groups',
+            description: 'Invite family members via a share link. Everyone stays in sync with real-time chat, a shared itinerary, and a group gallery.',
+            color: 'from-purple-500 to-pink-500',
         },
     ];
 
@@ -94,7 +106,7 @@ const LandingPage = () => {
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                     {features.map((feature, index) => {
                         const Icon = feature.icon;
                         return (

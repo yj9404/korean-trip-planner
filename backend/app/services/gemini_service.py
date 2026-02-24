@@ -196,21 +196,103 @@ Translation:"""
         """Detect Korean culture keywords in text"""
         # Keywords that trigger AI bot explanations
         korean_keywords = {
-            # Food
+            # Food & Drinks
             '김치', 'kimchi', '불고기', 'bulgogi', '삼겹살', 'samgyeopsal',
             '비빔밥', 'bibimbap', '떡볶이', 'tteokbokki', '치킨', 'korean chicken',
             '삼계탕', 'samgyetang', '냉면', 'naengmyeon', '갈비', 'galbi',
             '순대', 'sundae', '호떡', 'hotteok', '붕어빵', 'bungeoppang',
-            
-            # Places
-            '경복궁', 'gyeongbokgung', '남산', 'namsan', '명동', 'myeongdong',
-            '홍대', 'hongdae', '강남', 'gangnam', '인사동', 'insadong',
-            '북촌', 'bukchon', '이태원', 'itaewon', '동대문', 'dongdaemun',
-            
-            # Culture
-            '한복', 'hanbok', '사물놀이', 'samulnori', 'k-pop', 'kpop',
-            '노래방', 'noraebang', 'karaoke', 'pc방', 'pc bang',
-            '찜질방', 'jjimjilbang', '한옥', 'hanok'
+            '된장찌개', 'doenjang jjigae', '김치찌개', 'kimchi jjigae',
+            '부대찌개', 'budae jjigae', '순두부찌개', 'sundubu jjigae',
+            '잡채', 'japchae', '전', 'jeon', '파전', 'pajeon', '해물파전', 'haemul pajeon',
+            '만두', 'mandu', '군만두', 'goon mandu', '족발', 'jokbal',
+            '보쌈', 'bossam', '쌈', 'ssam', '곱창', 'gopchang',
+            '국밥', 'gukbap', '설렁탕', 'seolleongtang', '해장국', 'haejangguk',
+            '순대국', 'sundae guk', '우거지국', 'ugeoijiguk',
+            '라면', 'ramyeon', '라볶이', 'rabokki', '김밥', 'gimbap', '유부초밥',
+            '회', 'hoe', 'sashimi', '초밥', '간장게장', 'ganjang gejang',
+            '치맥', 'chimaek', '소맥', 'somaek', '막걸리', 'makgeolli',
+            '소주', 'soju', '맥주', '한국 맥주', 'korean beer', '식혜', 'sikhye',
+            '수정과', 'sujeonggwa', '믹스커피', 'mix coffee', '아이스아메리카노',
+            '탕수육', 'tangsuyuk', '짜장면', 'jajangmyeon', '짬뽕', 'jjamppong',
+            '마라탕', 'malatang', '양꼬치', 'yangggochi',
+            '오겹살', '고기집', 'korean bbq', 'bbq',
+            '편의점', 'convenience store', '세븐일레븐', 'cu', 'gs25',
+            '삼각김밥', 'triangle gimbap', '핫바', '컵라면',
+            '노포', 'old restaurant', '맛집', 'matjip', 'famous restaurant',
+            '디저트', 'dessert', '빙수', 'bingsu', '팥빙수', 'patbingsu',
+            '달고나', 'dalgona', '약과', 'yakgwa', '한과', 'hangwa',
+
+            # Places — Seoul
+            '경복궁', 'gyeongbokgung', '창덕궁', 'changdeokgung', '덕수궁', 'deoksugung',
+            '경희궁', 'gyeonghuigung', '종묘', 'jongmyo',
+            '남산', 'namsan', '남산타워', 'n seoul tower', 'namsan tower',
+            '명동', 'myeongdong', '홍대', 'hongdae', '강남', 'gangnam',
+            '인사동', 'insadong', '북촌', 'bukchon', '이태원', 'itaewon',
+            '동대문', 'dongdaemun', 'ddp', '동대문디자인플라자',
+            '잠실', 'jamsil', '롯데월드', 'lotte world', '코엑스', 'coex',
+            '광화문', 'gwanghwamun', '청계천', 'cheonggyecheon',
+            '한강', 'han river', '여의도', 'yeouido', '뚝섬', 'ttukseom',
+            '서촌', 'seochon', '연남동', 'yeonnam', '성수동', 'seongsu',
+            '익선동', 'ikseon-dong', '을지로', 'euljiro',
+            '합정', 'hapjeong', '망원', 'mangwon', '상수', 'sangsu',
+            '신촌', 'sinchon', '건대', 'konkuk', '왕십리', 'wangsimni',
+            '동묘', 'dongmyo', '낙원상가', 'nakwon',
+            '서울숲', 'seoul forest', '올림픽공원', 'olympic park',
+            '북한산', 'bukhansan', '관악산', 'gwanaksan', '도봉산', 'dobongsan',
+
+            # Places — Outside Seoul
+            '부산', 'busan', '해운대', 'haeundae', '광안리', 'gwangalli',
+            '자갈치', 'jagalchi', '국제시장', 'gukje market', '감천문화마을', 'gamcheon',
+            '경주', 'gyeongju', '불국사', 'bulguksa', '석굴암', 'seokguram',
+            '제주', 'jeju', '한라산', 'hallasan', '성산일출봉', 'seongsan ilchulbong',
+            '협재', 'hyeopjae', '애월', 'aewol',
+            '전주', 'jeonju', '전주한옥마을', 'jeonju hanok village',
+            '수원', 'suwon', '수원화성', 'hwaseong fortress',
+            '춘천', 'chuncheon', '남이섬', 'nami island',
+            '강릉', 'gangneung', '정동진', 'jeongdongjin',
+            '속초', 'sokcho', '설악산', 'seoraksan',
+            '인천', 'incheon', '인천공항', 'incheon airport', '차이나타운',
+
+            # Culture & Entertainment
+            '한복', 'hanbok', '한옥', 'hanok', '사물놀이', 'samulnori',
+            'k-pop', 'kpop', '케이팝', '아이돌', 'idol',
+            '노래방', 'noraebang', 'karaoke', 'pc방', 'pc bang', 'pc cafe',
+            '찜질방', 'jjimjilbang', '사우나', 'sauna', '목욕탕', 'bathhouse',
+            '한류', 'hallyu', 'korean wave', '드라마', 'k-drama', 'kdrama',
+            '방탄소년단', 'bts', '블랙핑크', 'blackpink', '뉴진스', 'newjeans',
+            '투어', 'tour', '팬미팅', 'fan meeting', '콘서트', 'concert',
+            '무속신앙', '무당', 'shaman', '도깨비', 'goblin', '귀신',
+            '태권도', 'taekwondo', '합기도', 'hapkido',
+            '배드민턴', '탁구', '볼링', '당구',
+            '보드게임카페', 'board game cafe', '방탈출', 'escape room',
+            '오락실', 'arcade', '인형뽑기',
+
+            # Shopping
+            '쇼핑', 'shopping', '시장', 'market', '재래시장', 'traditional market',
+            '광장시장', 'gwangjang market', '남대문시장', 'namdaemun market',
+            '면세점', 'duty free', '올리브영', 'olive young',
+            '다이소', 'daiso', '무신사', 'musinsa',
+            '롯데백화점', 'lotte department', '현대백화점', 'hyundai department',
+            '신세계', 'shinsegae', '갤러리아',
+            '이케아', 'ikea', '코스트코', 'costco',
+            '홍대 쇼핑', '명동 쇼핑', '동대문 쇼핑',
+
+            # Transport & Practical
+            '지하철', 'subway', 'metro', '버스', 'bus', '택시', 'taxi',
+            '카카오택시', 'kakao taxi', '우버', 'uber',
+            'ktx', '고속열차', 'high-speed rail', '기차', 'train',
+            '교통카드', 't-money', 'tmoney', '티머니',
+            '환승', 'transfer', '환불', 'refund',
+            '공항철도', 'arex', '리무진버스', 'limousine bus',
+            '투어버스', 'city tour bus',
+
+            # Practical / Useful
+            '약국', 'pharmacy', '편의점', '병원', 'hospital', '경찰', 'police',
+            '환전', 'currency exchange', '환율', 'exchange rate',
+            '와이파이', 'wifi', '포켓와이파이', 'pocket wifi', '유심', 'sim card',
+            '숙소', 'accommodation', '호텔', 'hotel', '게스트하우스', 'guesthouse',
+            '에어비앤비', 'airbnb', '한옥스테이', 'hanok stay',
+            '짐 보관', 'luggage storage', '코인로커', 'coin locker',
         }
         
         text_lower = text.lower()
