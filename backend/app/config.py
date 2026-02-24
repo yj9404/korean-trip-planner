@@ -55,8 +55,3 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
-
-if settings.google_drive_folder_id:
-    print(f"📂 Google Drive Folder ID Loaded: {settings.google_drive_folder_id}")
-else:
-    print("⚠️ Google Drive Folder ID NOT SET")

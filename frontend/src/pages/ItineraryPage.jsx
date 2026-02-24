@@ -322,7 +322,8 @@ const ItineraryPage = ({ user }) => {
                                                                 </h3>
                                                                 <button
                                                                     onPointerDown={(e) => e.stopPropagation()} // Prevent drag start
-                                                                    onClick={async () => {
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation(); // Prevent opening description popup
                                                                         if (confirm('Delete this place?')) {
                                                                             await deletePlace(place.id);
                                                                             loadPlaces();
@@ -402,7 +403,7 @@ const ItineraryPage = ({ user }) => {
 
             {/* Add Place Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={() => setShowAddModal(false)}>
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl max-w-lg w-full max-h-[80vh] flex flex-col relative" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b">
                             <h2 className="text-xl font-bold text-gray-800 mb-4">Add New Place</h2>
@@ -498,7 +499,7 @@ const ItineraryPage = ({ user }) => {
 
             {/* Place Description Modal */}
             {showDescModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={() => setShowDescModal(false)}>
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl max-w-sm w-full relative p-6 animate-fade-in" onClick={e => e.stopPropagation()}>
                         <h2 className="text-xl font-bold text-gray-900 mb-2">
                             {selectedPlace?.name_en || selectedPlace?.name_ko}

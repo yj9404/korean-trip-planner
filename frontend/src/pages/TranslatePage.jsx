@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { apiService } from '../services/api';
-import { FiArrowRight, FiGlobe } from 'react-icons/fi';
+import { FiGlobe } from 'react-icons/fi';
+import { MdSwapHoriz } from 'react-icons/md';
 
 const TranslatePage = () => {
     const [sourceText, setSourceText] = useState('');
@@ -80,9 +81,10 @@ const TranslatePage = () => {
                         <button
                             onClick={handleSwapLanguages}
                             disabled={sourceLang === 'auto'}
-                            className="p-3 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+                            className="p-3 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40 text-gray-500 hover:text-primary-600"
+                            title="Swap languages"
                         >
-                            <FiArrowRight className="text-xl text-gray-600 transform rotate-180" />
+                            <MdSwapHoriz className="text-2xl" />
                         </button>
 
                         <select

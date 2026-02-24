@@ -53,29 +53,24 @@ DEBUG=False
 > `FIREBASE_CREDENTIALS_JSON` (JSON 문자열)을 사용하고
 > `FIREBASE_CREDENTIALS_PATH`는 사용하지 마세요.
 
-### 2-2. Cloud Run 배포
+### 2-2. Cloud Run 배포 (자동화 스크립트 사용)
 
-```bash
-cd backend
+환경변수(JSON 포함)를 수동으로 입력하다가 발생하는 터미널 오류(`\` 명령어 줄내림 등)나 PowerShell 권한 차단을 방지하기 위해 **Node.js 자동 배포 스크립트**를 제공합니다.
 
-# Docker 이미지 빌드 + Cloud Run에 직접 배포 (소스 배포)
-gcloud run deploy korean-trip-api \
-  --source . \
-  --region asia-northeast3 \
-  --platform managed \
-  --allow-unauthenticated \
-  --set-env-vars GEMINI_API_KEY="your_key" \
-  --set-env-vars FIREBASE_CREDENTIALS_JSON='{"type":"service_account",...}' \
-  --set-env-vars GOOGLE_DRIVE_FOLDER_ID="your_folder_id" \
-  --set-env-vars GOOGLE_CLIENT_ID="your_client_id" \
-  --set-env-vars GOOGLE_CLIENT_SECRET="your_client_secret" \
-  --set-env-vars GOOGLE_REFRESH_TOKEN="your_refresh_token" \
-  --set-env-vars CORS_ORIGINS="https://YOUR_PROJECT.web.app" \
-  --set-env-vars DEBUG="False" \
-  --memory 512Mi \
-  --min-instances 0 \
-  --max-instances 3
-```
+1. **`backend/.env` 파일 수정:**
+   ```env
+   # 기존 설정값들 (GEMINI_API_KEY, GOOGLE_CLIENT_ID 등) 유지
+   # CORS_ORIGINS 부분만 다음과 같이 두 도메인을 매핑해서 저장
+   CORS_ORIGINS=https://korean-trip-planner.web.app,https://korean-trip-planner.firebaseapp.com
+   ```
+
+2. **JavaScript 배포 스크립트 실행:**
+   백엔드 폴더에서 다음을 실행하면, `.env` 문서와 `firebase-credentials.json`을 자동으로 읽어 Google Cloud Run에 배포합니다.
+
+   ```powershell
+   cd backend
+   node deploy.js
+   ```
 
 배포 완료 후 출력되는 URL을 복사합니다.
 예: `https://korean-trip-api-xxxxxxxx-an.a.run.app`
