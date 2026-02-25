@@ -19,6 +19,7 @@ from app.models.ai_guide import AIGuideRequest, AIGuideResponse, Recommendation
 FLASH_LITE = 'gemini-2.5-flash-lite'
 FLASH = 'gemini-2.5-flash'
 
+import asyncio
 
 class GeminiService:
     """Service for Google Gemini AI operations"""
@@ -30,6 +31,27 @@ class GeminiService:
     def _configure(self):
         """Configure Gemini API"""
         self.client = genai.Client(api_key=settings.gemini_api_key)
+
+    async def _safe_generate(self, model: str, contents, retries: int = 3, **kwargs):
+        """Helper to securely call Gemini API with exponential backoff on 503/429 errors."""
+        for attempt in range(retries):
+            try:
+                return await self.client.aio.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    **kwargs
+                )
+            except Exception as e:
+                err_str = str(e)
+                # Check for rate limit or high demand indicators
+                if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    if attempt < retries - 1:
+                        wait_ms = (attempt + 1) * 1.5  # 1.5s, 3.0s...
+                        logger.warning(f"Gemini API high demand ({err_str[:40]}...). Retrying {attempt+1}/{retries} in {wait_ms}s...")
+                        await asyncio.sleep(wait_ms)
+                        continue
+                logger.error(f"Gemini API failed after {attempt+1} attempts: {type(e).__name__}: {str(e)}")
+                raise
     
     async def translate(self, request: TranslationRequest) -> TranslationResponse:
         """Translate text using Gemini"""
@@ -55,7 +77,7 @@ Text to translate:
 
 Translation:"""
         
-        response = await self.client.aio.models.generate_content(
+        response = await self._safe_generate(
             model=FLASH_LITE,
             contents=prompt
         )
@@ -97,7 +119,7 @@ Provide a helpful, detailed response that includes:
 
 Keep the tone warm, informative, and encouraging."""
         
-        response = await self.client.aio.models.generate_content(
+        response = await self._safe_generate(
             model=FLASH,
             contents=prompt
         )
@@ -135,7 +157,7 @@ For each recommendation, provide:
 
 Format your response as a numbered list with clear sections."""
         
-        response = await self.client.aio.models.generate_content(
+        response = await self._safe_generate(
             model=FLASH,
             contents=prompt
         )
@@ -170,7 +192,7 @@ Only provide the translation, no explanations.
 Translation:"""
         
         try:            
-            response = await self.client.aio.models.generate_content(
+            response = await self._safe_generate(
                 model=FLASH_LITE,
                 contents=prompt
             )
@@ -328,7 +350,7 @@ Focus on:
 
 Keep it conversational and helpful."""
         
-        response = await self.client.aio.models.generate_content(
+        response = await self._safe_generate(
             model=FLASH,
             contents=prompt
         )
@@ -343,7 +365,7 @@ Input: '{text}'
 Output: Just the Korean term. No explanations."""
 
         try:
-            response = await self.client.aio.models.generate_content(
+            response = await self._safe_generate(
                 model=FLASH_LITE,
                 contents=prompt
             )
@@ -396,7 +418,7 @@ Example:
 ]"""
 
         try:
-            response = await self.client.aio.models.generate_content(
+            response = await self._safe_generate(
                 model=FLASH_LITE,
                 contents=prompt
             )
@@ -430,7 +452,7 @@ Example:
         Write in English."""
         
         try:
-            response = await self.client.aio.models.generate_content(
+            response = await self._safe_generate(
                 model=FLASH_LITE,
                 contents=prompt
             )
@@ -482,7 +504,7 @@ If you cannot read the menu clearly, return:
                     "data": base64.b64encode(image_bytes).decode("utf-8")
                 }
             }
-            response = await self.client.aio.models.generate_content(
+            response = await self._safe_generate(
                 model=FLASH,
                 contents=[prompt, image_part]
             )
