@@ -16,18 +16,28 @@ const TEXT_COLORS = [
     'text-rose-600', 'text-emerald-600', 'text-fuchsia-600'
 ];
 
-const getHashIndex = (str) => {
+const getHashIndex = (userId, userName) => {
+    const str = `${userId || ''}_${userName || ''}`;
     let hash = 0;
-    if (!str || str.length === 0) return 0;
+    if (str.length === 0) return 0;
+
     for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        const char = str.charCodeAt(i);
+        // 소수(prime)를 활용한 약간 변형된 널리 쓰이는 해시 알고리즘 (DJB2 변형 등)
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // 32-bit int 변환
     }
-    return Math.abs(hash) % COLORS.length;
+
+    // 약간의 salt 연산을 추가하여 충돌 확률을 줄임
+    hash = Math.abs(hash ^ 0x5bf03635);
+
+    return hash % COLORS.length;
 };
 
 const ChatBubble = ({ message, isOwnMessage, translatedText, onToggleTranslation, showTranslation }) => {
     const isAIBot = message.is_ai_bot;
-    const colorIndex = getHashIndex(message.sender_id);
+    // sender_id와 sender_name을 조합해서 해시를 만들면 기존 채팅과 새 채팅 모두 충돌 확률이 현저히 낮아짐
+    const colorIndex = getHashIndex(message.sender_id, message.sender_name);
     const userBgColor = COLORS[colorIndex];
     const userTextColor = TEXT_COLORS[colorIndex];
 
@@ -36,8 +46,8 @@ const ChatBubble = ({ message, isOwnMessage, translatedText, onToggleTranslation
             <div className={`flex ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'} items-end max-w-[70%] gap-2`}>
                 {/* Avatar */}
                 <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isAIBot ? 'bg-purple-500'
-                        : isOwnMessage ? 'bg-primary-500'
-                            : userBgColor
+                    : isOwnMessage ? 'bg-primary-500'
+                        : userBgColor
                     }`}>
                     {isAIBot ? (
                         <FiMessageCircle className="text-white text-sm" />

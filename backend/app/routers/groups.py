@@ -75,6 +75,13 @@ async def get_my_groups(current_user: dict = Depends(get_current_user)):
     return groups
 
 
+@router.get("/my-pending-groups", response_model=List[GroupResponse])
+async def get_my_pending_groups(current_user: dict = Depends(get_current_user)):
+    """Get all groups where user has PENDING membership"""
+    user_id = current_user["uid"]
+    groups = await firebase_service.get_user_pending_groups(user_id)
+    return groups
+
 @router.post("/switch/{group_id}", status_code=status.HTTP_200_OK)
 async def switch_group(
     group_id: str,

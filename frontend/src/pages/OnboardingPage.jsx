@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../services/firebase';
 import { signOut } from 'firebase/auth';
@@ -10,7 +10,29 @@ const OnboardingPage = ({ user, existingGroups = [], onGroupUpdate }) => {
     const [inviteCode, setInviteCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [pendingGroup, setPendingGroup] = useState(null);
+    const [pendingGroups, setPendingGroups] = useState([]);
+    const [fetchingPending, setFetchingPending] = useState(true);
+
+    useEffect(() => {
+        const fetchPendingGroups = async () => {
+            try {
+                const token = await user.getIdToken(true);
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/groups/my-pending-groups`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setPendingGroups(data);
+                }
+            } catch (err) {
+                console.error('Fetch pending error:', err);
+            } finally {
+                setFetchingPending(false);
+            }
+        };
+        fetchPendingGroups();
+    }, [user]);
+
 
     const handleCreateGroup = async (e) => {
         e.preventDefault();
@@ -102,7 +124,7 @@ const OnboardingPage = ({ user, existingGroups = [], onGroupUpdate }) => {
             }
 
             // Show pending approval message
-            setPendingGroup(data.group_name);
+            setPendingGroups([...pendingGroups, { name: data.group_name }]);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -119,7 +141,21 @@ const OnboardingPage = ({ user, existingGroups = [], onGroupUpdate }) => {
         }
     };
 
-    if (pendingGroup) {
+    if (fetchingPending) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-600 flex items-center justify-center px-4">
+                <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full text-center text-gray-600">
+                    <svg className="animate-spin h-8 w-8 text-indigo-600 mx-auto mb-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Loading your profile...
+                </div>
+            </div>
+        );
+    }
+
+    if (pendingGroups.length > 0) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-600 flex items-center justify-center px-4">
                 <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full text-center">
@@ -129,7 +165,7 @@ const OnboardingPage = ({ user, existingGroups = [], onGroupUpdate }) => {
                         </div>
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">Waiting for Approval</h2>
                         <p className="text-gray-600">
-                            Your request to join <strong>{pendingGroup}</strong> has been submitted.
+                            Your request to join <strong>{pendingGroups.map(g => g.name).join(', ')}</strong> has been submitted.
                         </p>
                         <p className="text-gray-500 text-sm mt-2">
                             The group owner will review your request shortly.
@@ -140,6 +176,13 @@ const OnboardingPage = ({ user, existingGroups = [], onGroupUpdate }) => {
                         className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300 transition"
                     >
                         Logout
+                    </button>
+                    {/* Add option to cancel or do other things if needed, but going back to start is cleaner */}
+                    <button
+                        onClick={() => setPendingGroups([])}
+                        className="w-full mt-3 text-sm text-gray-500 hover:text-gray-700 transition"
+                    >
+                        Create another group instead
                     </button>
                 </div>
             </div>

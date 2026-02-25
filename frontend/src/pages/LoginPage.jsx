@@ -12,6 +12,27 @@ import { auth, db } from '../services/firebase';
 import { FiMail, FiLock, FiMap, FiUser, FiX } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 
+const getFriendlyErrorMessage = (error) => {
+    switch (error.code) {
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+            return '이메일 또는 비밀번호가 올바르지 않습니다. (Invalid credentials)';
+        case 'auth/email-already-in-use':
+            return '이미 사용 중인 이메일입니다. (Email already in use)';
+        case 'auth/weak-password':
+            return '비밀번호는 최소 6자리 이상이어야 합니다. (Password must be 6+ chars)';
+        case 'auth/invalid-email':
+            return '유효하지 않은 이메일 형식입니다. (Invalid email format)';
+        case 'auth/too-many-requests':
+            return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+        case 'auth/network-request-failed':
+            return '네트워크 연결 상태를 확인해주세요. (Network error)';
+        default:
+            return error.message;
+    }
+};
+
 const LoginPage = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -81,7 +102,7 @@ const LoginPage = () => {
                 navigate(getPostLoginRedirect());
             }
         } catch (err) {
-            setError(err.message);
+            setError(getFriendlyErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -129,7 +150,7 @@ const LoginPage = () => {
                 // User closed the popup, just reset loading state
                 setLoading(false);
             } else {
-                setError(err.message);
+                setError(getFriendlyErrorMessage(err));
                 setLoading(false);
             }
         }
@@ -153,7 +174,7 @@ const LoginPage = () => {
 
             navigate(getPostLoginRedirect());
         } catch (err) {
-            setError(err.message);
+            setError(getFriendlyErrorMessage(err));
         } finally {
             setLoading(false);
         }

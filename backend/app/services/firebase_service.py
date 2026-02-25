@@ -360,19 +360,75 @@ class FirebaseService:
         try:
             # Query by single field to avoid composite index requirement
             member_docs = self.db.collection("group_members").where("user_id", "==", user_id).stream()
+            
+            active_memberships = []
             for member_doc in member_docs:
                 member_data = member_doc.to_dict()
-                # Filter ACTIVE status in Python
-                if member_data.get("status") != "ACTIVE":
-                    continue
-                group = await self.get_group(member_data["group_id"])
-                if group:
+                if member_data.get("status") == "ACTIVE":
+                    active_memberships.append((member_doc.id, member_data))
+                    
+            if not active_memberships:
+                return []
+                
+            # Batch fetch groups in one round trip using get_all
+            group_refs = [self.db.collection("groups").document(data["group_id"]) for _, data in active_memberships]
+            group_docs = self.db.get_all(group_refs)
+            
+            group_dict = {}
+            for doc in group_docs:
+                if doc.exists:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    group_dict[doc.id] = data
+                    
+            for mem_id, mem_data in active_memberships:
+                group_id = mem_data["group_id"]
+                if group_id in group_dict:
+                    group = dict(group_dict[group_id])
                     # Attach role info from member record
-                    group["role"] = member_data.get("role", "MEMBER")
-                    group["member_id"] = member_doc.id
+                    group["role"] = mem_data.get("role", "MEMBER")
+                    group["member_id"] = mem_id
                     groups.append(group)
+                    
         except Exception as e:
             print(f"Error getting user groups: {e}")
+        return groups
+    
+    async def get_user_pending_groups(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all groups where user has PENDING membership"""
+        groups = []
+        try:
+            member_docs = self.db.collection("group_members").where("user_id", "==", user_id).stream()
+            
+            pending_memberships = []
+            for member_doc in member_docs:
+                member_data = member_doc.to_dict()
+                if member_data.get("status") == "PENDING":
+                    pending_memberships.append((member_doc.id, member_data))
+                    
+            if not pending_memberships:
+                return []
+                
+            group_refs = [self.db.collection("groups").document(data["group_id"]) for _, data in pending_memberships]
+            group_docs = self.db.get_all(group_refs)
+            
+            group_dict = {}
+            for doc in group_docs:
+                if doc.exists:
+                    data = doc.to_dict()
+                    data["id"] = doc.id
+                    group_dict[doc.id] = data
+                    
+            for mem_id, mem_data in pending_memberships:
+                group_id = mem_data["group_id"]
+                if group_id in group_dict:
+                    group = dict(group_dict[group_id])
+                    group["role"] = mem_data.get("role", "MEMBER")
+                    group["member_id"] = mem_id
+                    groups.append(group)
+                    
+        except Exception as e:
+            print(f"Error getting user pending groups: {e}")
         return groups
     
     async def get_pending_members(self, group_id: str) -> List[Dict[str, Any]]:
@@ -380,26 +436,35 @@ class FirebaseService:
         members = []
         try:
             docs = self.db.collection("group_members").where("group_id", "==", group_id).stream()
+            pending_members = []
+            user_refs = []
+            
             for doc in docs:
                 data = doc.to_dict()
-                # Filter PENDING status in Python
-                if data.get("status") != "PENDING":
-                    continue
+                if data.get("status") == "PENDING":
+                    pending_members.append((doc.id, data))
+                    user_refs.append(self.db.collection("user_preferences").document(data.get("user_id")))
+                    
+            if not pending_members:
+                return []
+                
+            # Batch fetch user preferences
+            prefs_docs = self.db.get_all(user_refs)
+            prefs_dict = {}
+            for doc in prefs_docs:
+                if doc.exists:
+                    prefs_dict[doc.id] = doc.to_dict()
 
+            for doc_id, data in pending_members:
                 user_id = data.get("user_id")
-
-                # Fetch display name from user_preferences (same as get_group_members)
-                display_name = user_id  # fallback to uid
-                try:
-                    prefs_doc = self.db.collection("user_preferences").document(user_id).get()
-                    if prefs_doc.exists:
-                        prefs = prefs_doc.to_dict()
-                        display_name = prefs.get("english_name") or prefs.get("display_name") or user_id
-                except Exception:
-                    pass
+                display_name = user_id
+                
+                if user_id in prefs_dict:
+                    prefs = prefs_dict[user_id]
+                    display_name = prefs.get("english_name") or prefs.get("display_name") or user_id
 
                 members.append({
-                    "id": doc.id,
+                    "id": doc_id,
                     "user_id": user_id,
                     "display_name": display_name,
                     "role": data.get("role"),
@@ -456,27 +521,36 @@ class FirebaseService:
         members = []
         try:
             # Query by single field to avoid composite index requirement
-            members_docs = self.db.collection("group_members").where("group_id", "==", group_id).get()
+            members_docs = self.db.collection("group_members").where("group_id", "==", group_id).stream()
+            
+            active_members = []
+            user_refs = []
             for doc in members_docs:
                 data = doc.to_dict()
-                # Filter ACTIVE status in Python
-                if data.get("status") != "ACTIVE":
-                    continue
+                if data.get("status") == "ACTIVE":
+                    active_members.append((doc.id, data))
+                    user_refs.append(self.db.collection("user_preferences").document(data.get("user_id")))
+                    
+            if not active_members:
+                return []
+                
+            # Batch fetch user preferences using get_all
+            prefs_docs = self.db.get_all(user_refs)
+            prefs_dict = {}
+            for doc in prefs_docs:
+                if doc.exists:
+                    prefs_dict[doc.id] = doc.to_dict()
 
+            for doc_id, data in active_members:
                 user_id = data.get("user_id")
-
-                # Fetch english_name from user_preferences
                 display_name = user_id  # fallback to uid
-                try:
-                    prefs_doc = self.db.collection("user_preferences").document(user_id).get()
-                    if prefs_doc.exists:
-                        prefs = prefs_doc.to_dict()
-                        display_name = prefs.get("english_name") or user_id
-                except Exception:
-                    pass  # Keep fallback uid
+                
+                if user_id in prefs_dict:
+                    prefs = prefs_dict[user_id]
+                    display_name = prefs.get("english_name") or prefs.get("display_name") or user_id
 
                 members.append({
-                    "id": doc.id,
+                    "id": doc_id,
                     "user_id": user_id,
                     "display_name": display_name,
                     "role": data.get("role"),
