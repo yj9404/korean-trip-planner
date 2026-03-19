@@ -67,7 +67,45 @@ class GeminiService:
         source = lang_names.get(request.source_lang, request.source_lang)
         target = lang_names.get(request.target_lang, request.target_lang)
         
-        prompt = f"""Translate the following text from {source} to {target}.
+        # Korean target: request JSON with pronunciation guide
+        if request.target_lang == "ko":
+            prompt = f"""Translate the following text from {source} to Korean.
+If the text contains internet slang, informal greetings, or abbreviations, translate them into natural Korean.
+
+{f"Context: {request.context}" if request.context else ""}
+
+Text to translate:
+{request.text}
+
+Return ONLY a valid JSON object in this exact format (no markdown, no extra text):
+{{
+  "translated": "한국어 번역 결과",
+  "pronunciation": "Roman alphabet pronunciation (e.g. Hwa-jang-sil-i eo-di-ye-yo?)"
+}}"""
+
+            response = await self._safe_generate(model=FLASH_LITE, contents=prompt)
+            raw = response.text.strip()
+            
+            # Strip markdown code blocks if present
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            if raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            
+            try:
+                parsed = json.loads(raw.strip())
+                translated_text = parsed.get("translated", "")
+                pronunciation = parsed.get("pronunciation", None)
+            except json.JSONDecodeError:
+                # Fallback: treat entire response as translated text
+                logger.warning("Failed to parse translation JSON, using raw response as translated text")
+                translated_text = raw.strip()
+                pronunciation = None
+        else:
+            # Non-Korean target: simple text response
+            prompt = f"""Translate the following text from {source} to {target}.
 If the text contains internet slang, informal greetings (e.g., Korean '하염', English 'sup'), or abbreviations, translate them into natural {target}.
 Only provide the translation, without any explanations or additional text.
 
@@ -77,16 +115,15 @@ Text to translate:
 {request.text}
 
 Translation:"""
-        
-        response = await self._safe_generate(
-            model=FLASH_LITE,
-            contents=prompt
-        )
-        translated_text = response.text.strip()
+
+            response = await self._safe_generate(model=FLASH_LITE, contents=prompt)
+            translated_text = response.text.strip()
+            pronunciation = None
         
         return TranslationResponse(
             original_text=request.text,
             translated_text=translated_text,
+            pronunciation=pronunciation,
             source_lang=request.source_lang,
             target_lang=request.target_lang
         )
@@ -392,7 +429,7 @@ Output: Just the Korean term. No explanations."""
             "mapy": item.get('mapy')
         } for item in items], ensure_ascii=False)
         
-        prompt = f"""Translate these place names and addresses to English.
+        prompt = f"""Translate these place names, addresses, and categories to English.
         
 Context: These are search results from Naver Maps in Korea.
 
@@ -402,9 +439,10 @@ Original Data:
 Instructions:
 1. Translate "title" to English (keep it recognizable).
 2. Translate "address" to English.
-3. Keep "category", "mapx", "mapy" as is.
+3. Translate "category" to English (e.g. "음식점>일식" to "Restaurant>Japanese"). Keep "mapx", "mapy" as is.
 4. Add original Korean "title" as "title_ko".
 5. Add original Korean "address" as "address_ko".
+6. Add original Korean "category" as "category_ko".
 
 Output Format: A pure JSON list of objects. No markdown formatting.
 Example:
@@ -412,11 +450,12 @@ Example:
   {{
     "title": "Gyeongbokgung Palace",
     "address": "161 Sajik-ro, Jongno-gu, Seoul",
-    "category": "Tourist Attraction",
+    "category": "Tourist Attraction>Palace",
     "mapx": "...", 
     "mapy": "...",
     "title_ko": "경복궁",
-    "address_ko": "서울 종로구 사직로 161"
+    "address_ko": "서울 종로구 사직로 161",
+    "category_ko": "명소>궁궐"
   }}
 ]"""
 
@@ -442,8 +481,10 @@ Example:
                 **item,
                 "title_ko": item['title'],
                 "address_ko": item.get('roadAddress') or item.get('address'),
+                "category_ko": item.get('category'),
                 "title": item['title'],
-                "address": item.get('roadAddress') or item.get('address')
+                "address": item.get('roadAddress') or item.get('address'),
+                "category": item.get('category')
             } for item in items]
 
 

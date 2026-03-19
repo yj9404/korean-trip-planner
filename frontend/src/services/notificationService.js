@@ -29,7 +29,14 @@ export async function requestPermissionAndGetToken() {
             return null;
         }
 
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        // Wait for the custom service worker registration with URL params to be ready
+        const registration = await navigator.serviceWorker.ready;
+
+        const token = await getToken(messaging, { 
+            vapidKey: VAPID_KEY,
+            serviceWorkerRegistration: registration 
+        });
+
         if (!token) {
             console.warn('[FCM] No token retrieved. Check VAPID key and Service Worker setup.');
             return null;

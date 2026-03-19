@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import packageJson from '../../package.json';
 import {
     FiHome,
     FiMapPin,
@@ -328,9 +329,12 @@ const Layout = ({ children, user, fullWidth = false }) => {
 
             {/* Footer */}
             <footer className="bg-white border-t border-gray-200 mt-auto">
-                <div className="container-app py-6">
+                <div className="container-app py-6 space-y-2">
                     <p className="text-center text-sm text-gray-500">
                         © 2026 Korea Trip Planner. Made with ❤️ for family adventures.
+                    </p>
+                    <p className="text-center text-xs text-gray-400 font-mono">
+                        v{packageJson.version}
                     </p>
                 </div>
             </footer>

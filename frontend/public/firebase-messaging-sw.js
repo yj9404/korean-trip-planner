@@ -10,36 +10,36 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-// Firebase config — must be kept in sync with frontend .env
-// Service workers cannot read import.meta.env, so values are inlined here.
-// These are public-safe client credentials (not secret keys).
-firebase.initializeApp({
-    apiKey: 'AIzaSyACjBAsL39B4ddQ6TDlMJCprHoALKtaEwg',
-    authDomain: 'korean-trip-planner.firebaseapp.com',
-    projectId: 'korean-trip-planner',
-    storageBucket: 'korean-trip-planner.firebasestorage.app',
-    messagingSenderId: '434095745262',
-    appId: '1:434095745262:web:07002b17a54c8ecbeeabff',
-});
+// URL 파라미터를 통해 전달된 동적 Firebase 설정값을 읽어옵니다.
+// 이렇게 하면 GitHub에 API 키가 하드코딩되어 올라가는 것을 방지할 수 있습니다.
+const urlParams = new URLSearchParams(location.search);
+const firebaseConfig = {
+    apiKey: urlParams.get('apiKey'),
+    authDomain: urlParams.get('authDomain'),
+    projectId: urlParams.get('projectId'),
+    storageBucket: urlParams.get('storageBucket'),
+    messagingSenderId: urlParams.get('messagingSenderId'),
+    appId: urlParams.get('appId'),
+};
 
-const messaging = firebase.messaging();
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    console.warn('[FCM-SW] Missing Firebase config from URL. Waiting for re-registration.');
+} else {
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
 
-/**
- * Handle background messages (app minimized or in a different tab).
- * Firebase automatically shows system notifications from the `notification`
- * field in the FCM payload. This handler fires for custom `data`-only payloads.
- */
-messaging.onBackgroundMessage((payload) => {
-    const { title, body } = payload.notification || {};
-    const url = payload.data?.url || '/chat';
+    messaging.onBackgroundMessage((payload) => {
+        const { title, body } = payload.notification || {};
+        const url = payload.data?.url || '/chat';
 
-    self.registration.showNotification(title || 'Korea Trip Planner', {
-        body: body || 'New message received',
-        icon: '/icons/icon-192x192.png',
-        badge: '/icons/icon-72x72.png',
-        data: { url },
+        self.registration.showNotification(title || 'Korea Trip Planner', {
+            body: body || 'New message received',
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/icon-72x72.png',
+            data: { url },
+        });
     });
-});
+}
 
 /**
  * Open the app and navigate to the linked URL when a notification is clicked.

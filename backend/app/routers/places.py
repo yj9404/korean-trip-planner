@@ -34,7 +34,8 @@ async def search_places_foreign(query: str):
                 "mapx": "",
                 "mapy": "",
                 "title_ko": korean_query,
-                "address_ko": korean_query
+                "address_ko": korean_query,
+                "category_ko": "사용자 입력 주소"
             }]
             
         # Step 3: Korean -> English

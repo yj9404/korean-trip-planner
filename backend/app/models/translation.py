@@ -16,6 +16,7 @@ class TranslationResponse(BaseModel):
     """Response model for translation"""
     original_text: str
     translated_text: str
+    pronunciation: Optional[str] = Field(None, description="Roman alphabet pronunciation guide (only for Korean translations)")
     source_lang: str
     target_lang: str
     confidence: Optional[float] = None

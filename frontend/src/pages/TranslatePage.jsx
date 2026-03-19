@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { apiService } from '../services/api';
-import { FiGlobe } from 'react-icons/fi';
+import { FiGlobe, FiVolume2 } from 'react-icons/fi';
 import { MdSwapHoriz } from 'react-icons/md';
 
 const TranslatePage = () => {
     const [sourceText, setSourceText] = useState('');
     const [translatedText, setTranslatedText] = useState('');
+    const [pronunciation, setPronunciation] = useState('');
     const [sourceLang, setSourceLang] = useState('auto');
-    const [targetLang, setTargetLang] = useState('en');
+    const [targetLang, setTargetLang] = useState('ko');
     const [loading, setLoading] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
 
     const languages = [
         { code: 'auto', name: 'Auto-detect' },
@@ -22,6 +24,7 @@ const TranslatePage = () => {
         if (!sourceText.trim()) return;
 
         setLoading(true);
+        setPronunciation('');
         try {
             const result = await apiService.translate(
                 sourceText,
@@ -29,6 +32,7 @@ const TranslatePage = () => {
                 targetLang
             );
             setTranslatedText(result.translated_text);
+            setPronunciation(result.pronunciation || '');
         } catch (error) {
             console.error('Translation error:', error);
             alert('Translation failed. Please try again.');
@@ -43,7 +47,27 @@ const TranslatePage = () => {
             setTargetLang(sourceLang);
             setSourceText(translatedText);
             setTranslatedText(sourceText);
+            setPronunciation('');
         }
+    };
+
+    // Web Speech API TTS — always reads the Korean translated text
+    const handleReadAloud = () => {
+        if (!translatedText || !window.speechSynthesis) return;
+
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(translatedText);
+        utterance.lang = 'ko-KR';
+        utterance.rate = 0.85;  // Slightly slow for travellers
+        utterance.pitch = 1;
+
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+
+        window.speechSynthesis.speak(utterance);
     };
 
     return (
@@ -89,7 +113,7 @@ const TranslatePage = () => {
 
                         <select
                             value={targetLang}
-                            onChange={(e) => setTargetLang(e.target.value)}
+                            onChange={(e) => { setTargetLang(e.target.value); setPronunciation(''); }}
                             className="input max-w-xs"
                         >
                             {languages.filter((l) => l.code !== 'auto').map((lang) => (
@@ -101,7 +125,7 @@ const TranslatePage = () => {
                     </div>
 
                     {/* Translation Boxes */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-6 items-start">
                         {/* Source Text */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -110,7 +134,7 @@ const TranslatePage = () => {
                             <textarea
                                 value={sourceText}
                                 onChange={(e) => setSourceText(e.target.value)}
-                                className="input h-64 resize-none font-mono"
+                                className="input h-48 resize-none font-mono"
                                 placeholder="Enter text to translate..."
                             />
                             <p className="text-sm text-gray-500 mt-2">
@@ -118,39 +142,79 @@ const TranslatePage = () => {
                             </p>
                         </div>
 
+                        {/* Middle Translate Button (Desktop) & Mobile Button */}
+                        <div className="flex lg:flex-col items-center justify-center lg:pt-8 gap-4">
+                            <button
+                                onClick={handleTranslate}
+                                disabled={loading || !sourceText.trim()}
+                                className="btn-primary flex-1 lg:flex-none py-4 px-8 shadow-lg hover:scale-105 transition-transform disabled:scale-100"
+                            >
+                                {loading ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        <span>Translating...</span>
+                                    </div>
+                                ) : (
+                                    <span className="flex items-center gap-2">
+                                        Translate
+                                        <span className="hidden lg:inline">→</span>
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+
                         {/* Translated Text */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Translation
-                            </label>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="block text-sm font-medium text-gray-700">
+                                    Translation
+                                </label>
+                                {/* Speaker Button */}
+                                {translatedText && targetLang === 'ko' && (
+                                    <button
+                                        onClick={handleReadAloud}
+                                        disabled={isSpeaking}
+                                        title="Read aloud (Korean)"
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                                            ${isSpeaking
+                                                ? 'bg-green-100 text-green-700 cursor-default shadow-inner'
+                                                : 'bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-700 hover:shadow-sm'
+                                            }`}
+                                    >
+                                        <FiVolume2 className={isSpeaking ? 'animate-pulse text-green-600' : ''} />
+                                        {isSpeaking ? 'Playing...' : 'Read Aloud'}
+                                    </button>
+                                )}
+                            </div>
+
                             <div className="relative">
                                 <textarea
                                     value={translatedText}
                                     readOnly
-                                    className="input h-64 resize-none font-mono bg-gray-50"
+                                    className="input h-48 resize-none font-mono bg-gray-50"
                                     placeholder="Translation will appear here..."
                                 />
                                 {loading && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-                                        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-[1px] rounded-lg">
+                                        <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
                                     </div>
                                 )}
                             </div>
-                            <p className="text-sm text-gray-500 mt-2">
+
+                            {/* Pronunciation Guide */}
+                            {pronunciation && (
+                                <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-100 animate-fade-in">
+                                    <p className="text-sm font-semibold text-emerald-800 mb-0.5">Pronunciation</p>
+                                    <p className="text-sm text-emerald-600 italic leading-relaxed">
+                                        {pronunciation}
+                                    </p>
+                                </div>
+                            )}
+
+                            <p className="text-sm text-gray-500 mt-1">
                                 {translatedText.length} characters
                             </p>
                         </div>
-                    </div>
-
-                    {/* Translate Button */}
-                    <div className="mt-6">
-                        <button
-                            onClick={handleTranslate}
-                            disabled={loading || !sourceText.trim()}
-                            className="btn-primary w-full lg:w-auto px-12"
-                        >
-                            {loading ? 'Translating...' : 'Translate'}
-                        </button>
                     </div>
                 </div>
             </div>
@@ -166,11 +230,11 @@ const TranslatePage = () => {
                             'Where is the bathroom?',
                             'How much does this cost?',
                             'Can you help me?',
-                            'I don\'t speak Korean',
+                            "I don't speak Korean",
                         ].map((phrase) => (
                             <button
                                 key={phrase}
-                                onClick={() => setSourceText(phrase)}
+                                onClick={() => { setSourceText(phrase); setPronunciation(''); setTranslatedText(''); }}
                                 className="p-3 text-left border border-gray-200 rounded-lg hover:bg-primary-50 hover:border-primary-300 transition-colors"
                             >
                                 <span className="text-sm text-gray-700">{phrase}</span>
