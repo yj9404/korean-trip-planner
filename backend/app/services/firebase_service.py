@@ -1,7 +1,7 @@
 """Firebase service for authentication and Firestore operations"""
 
 import firebase_admin
-from firebase_admin import credentials, firestore, auth
+from firebase_admin import credentials, firestore, auth, messaging
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 import json
@@ -629,7 +629,114 @@ class FirebaseService:
             print(f"Error kicking member: {e}")
             return False
 
+    # ========== FCM Token Management ==========
+    async def save_fcm_token(self, user_id: str, token: str) -> bool:
+        """Save an FCM token for a user (multi-device: stored as array)"""
+        try:
+            doc_ref = self.db.collection("user_preferences").document(user_id)
+            doc = doc_ref.get()
+            if doc.exists:
+                existing = doc.to_dict().get("fcm_tokens", [])
+                if token not in existing:
+                    existing.append(token)
+                    doc_ref.update({"fcm_tokens": existing})
+            else:
+                doc_ref.set({"user_id": user_id, "fcm_tokens": [token]}, merge=True)
+            return True
+        except Exception as e:
+            print(f"Error saving FCM token: {e}")
+            return False
 
+    async def remove_fcm_token(self, user_id: str, token: str) -> bool:
+        """Remove a specific FCM token from a user's list"""
+        try:
+            doc_ref = self.db.collection("user_preferences").document(user_id)
+            doc = doc_ref.get()
+            if doc.exists:
+                existing = doc.to_dict().get("fcm_tokens", [])
+                updated = [t for t in existing if t != token]
+                doc_ref.update({"fcm_tokens": updated})
+            return True
+        except Exception as e:
+            print(f"Error removing FCM token: {e}")
+            return False
+
+    async def get_group_member_fcm_tokens(self, group_id: str) -> Dict[str, List[str]]:
+        """Get all FCM tokens for ACTIVE members of a group.
+        Returns a dict of {user_id: [tokens]} for easy per-sender filtering.
+        """
+        result: Dict[str, List[str]] = {}
+        try:
+            members_docs = self.db.collection("group_members").where("group_id", "==", group_id).stream()
+            active_user_ids = [
+                doc.to_dict()["user_id"]
+                for doc in members_docs
+                if doc.to_dict().get("status") == "ACTIVE"
+            ]
+            if not active_user_ids:
+                return result
+
+            pref_refs = [self.db.collection("user_preferences").document(uid) for uid in active_user_ids]
+            pref_docs = self.db.get_all(pref_refs)
+            for doc in pref_docs:
+                if doc.exists:
+                    data = doc.to_dict()
+                    tokens = data.get("fcm_tokens", [])
+                    if tokens:
+                        result[doc.id] = tokens
+        except Exception as e:
+            print(f"Error fetching group FCM tokens: {e}")
+        return result
+
+    async def send_push_notifications(
+        self,
+        tokens: List[str],
+        title: str,
+        body: str,
+        data: Optional[Dict[str, str]] = None,
+        user_id_for_cleanup: Optional[str] = None,
+    ) -> int:
+        """Send FCM push notifications to a list of tokens.
+        Automatically cleans up invalid/expired tokens.
+        Returns the number of successful sends.
+        """
+        if not tokens:
+            return 0
+        try:
+            message = messaging.MulticastMessage(
+                notification=messaging.Notification(title=title, body=body),
+                data=data or {},
+                tokens=tokens,
+                webpush=messaging.WebpushConfig(
+                    notification=messaging.WebpushNotification(
+                        title=title,
+                        body=body,
+                        icon="/icons/icon-192x192.png",
+                    ),
+                    fcm_options=messaging.WebpushFCMOptions(
+                        link=data.get("url", "/chat") if data else "/chat"
+                    ),
+                ),
+            )
+            response = messaging.send_each_for_multicast(message)
+            # Clean up invalid tokens
+            if user_id_for_cleanup and response.failure_count > 0:
+                invalid_tokens = [
+                    tokens[i]
+                    for i, resp in enumerate(response.responses)
+                    if not resp.success
+                    and resp.exception
+                    and getattr(resp.exception, "code", "") in (
+                        "messaging/registration-token-not-registered",
+                        "messaging/invalid-registration-token",
+                    )
+                ]
+                for bad_token in invalid_tokens:
+                    await self.remove_fcm_token(user_id_for_cleanup, bad_token)
+            return response.success_count
+        except Exception as e:
+            print(f"Error sending push notifications: {e}")
+            return 0
 
 
 # Global Firebase service instance

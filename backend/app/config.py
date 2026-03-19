@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     firebase_credentials_json: str | None = None
     # Method 2: Path to JSON file (for local development)
     firebase_credentials_path: str = "./firebase-credentials.json"
+    # FCM VAPID Key (Web Push)
+    fcm_vapid_key: str | None = None
     
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:5173"

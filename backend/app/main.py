@@ -17,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from app.config import settings
-from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups, menu, media
+from app.routers import translate, trips, ai_guide, chat, itinerary, places, groups, menu, media, users
 from app.services.firebase_service import firebase_service
 
 
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Korea Trip Planner API",
     description="Backend API for Korea Trip Planner PWA",
-    version="0.1.1",
+    version="0.1.2",
     lifespan=lifespan
 )
 
@@ -67,6 +67,7 @@ app.include_router(translate.router, prefix=f"/api/{settings.api_version}", tags
 # app.include_router(trips.router, prefix=f"/api/{settings.api_version}", tags=["Trips"])  # Removed - single trip architecture
 app.include_router(ai_guide.router, prefix=f"/api/{settings.api_version}", tags=["AI Guide"])
 app.include_router(chat.router, prefix=f"/api/{settings.api_version}", tags=["Chat"])
+app.include_router(users.router, prefix=f"/api/{settings.api_version}", tags=["Users"])
 app.include_router(itinerary.router, tags=["Itinerary"])
 app.include_router(places.router, prefix="/api/v1", tags=["Places"])
 app.include_router(menu.router, prefix="/api/v1", tags=["Menu"])
@@ -78,7 +79,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "Welcome to Korea Trip Planner API",
-        "version": "0.1.1",
+        "version": "0.1.2",
         "docs": "/docs"
     }
 

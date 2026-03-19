@@ -134,8 +134,33 @@ async def send_message(room_id: str, message_data: ChatMessageCreate):
         message_id = await firebase_service.send_message(room_id, message_dict)
         message_dict["id"] = message_id
         message_dict["timestamp"] = datetime.utcnow()
-        
-        # 3. Check for keywords and trigger AI bot if enabled
+
+        # 3. Send push notifications to group members (best-effort, never fails the request)
+        try:
+            group_id = room.get("group_id")
+            if group_id:
+                sender_id = message_data.sender_id
+                sender_name = message_dict.get("sender_name", "Someone")
+                token_map = await firebase_service.get_group_member_fcm_tokens(group_id)
+                # Collect tokens for all members except the sender
+                recipient_tokens = [
+                    token
+                    for uid, tokens in token_map.items()
+                    if uid != sender_id
+                    for token in tokens
+                ]
+                if recipient_tokens:
+                    push_body = message_data.text[:100]  # Truncate long messages
+                    await firebase_service.send_push_notifications(
+                        tokens=recipient_tokens,
+                        title=f"New message from {sender_name}",
+                        body=push_body,
+                        data={"url": "/chat"},
+                    )
+        except Exception as push_err:
+            logger.warning(f"Push notification failed (non-critical): {push_err}")
+
+        # 4. Check for keywords and trigger AI bot if enabled
         keywords = gemini_service.detect_keywords(message_data.text)
         
         if keywords:

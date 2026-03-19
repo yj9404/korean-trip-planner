@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { auth } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { requestPermissionAndGetToken } from './services/notificationService';
 
 // Context
 import { GroupProvider } from './contexts/GroupContext';
@@ -83,6 +84,8 @@ function App() {
             setUser(currentUser);
             if (currentUser) {
                 await checkUserGroups(currentUser);
+                // Request notification permission and sync FCM token (non-blocking)
+                requestPermissionAndGetToken().catch(() => {});
             }
             setLoading(false);
         });

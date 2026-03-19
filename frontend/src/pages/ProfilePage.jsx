@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
-import { FiUser, FiSave, FiGlobe, FiMessageCircle } from 'react-icons/fi';
+import { FiUser, FiSave, FiGlobe, FiMessageCircle, FiBell } from 'react-icons/fi';
 import Loading from '../components/Loading';
+import { requestPermissionAndGetToken } from '../services/notificationService';
 
 const ProfilePage = ({ user }) => {
     const [koreanName, setKoreanName] = useState('');
@@ -14,6 +15,7 @@ const ProfilePage = ({ user }) => {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [notificationStatus, setNotificationStatus] = useState(Notification.permission);
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -87,6 +89,21 @@ const ProfilePage = ({ user }) => {
             setError('Failed to save profile. Please try again.');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleEnableNotifications = async () => {
+        try {
+            const token = await requestPermissionAndGetToken();
+            setNotificationStatus(Notification.permission);
+            if (token) {
+                setSuccess('Push notifications enabled successfully!');
+                setTimeout(() => setSuccess(''), 3000);
+            } else if (Notification.permission === 'denied') {
+                setError('Notification permission denied. Please enable it in your browser settings.');
+            }
+        } catch (err) {
+            console.error(err);
         }
     };
 
@@ -214,6 +231,38 @@ const ProfilePage = ({ user }) => {
                                         }`}
                                 />
                             </button>
+                        </div>
+                    </div>
+
+                    {/* Push Notifications Settings */}
+                    <div className="pb-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <FiBell className="mr-2" />
+                            Push Notifications
+                        </h2>
+
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                            <div>
+                                <p className="font-medium text-gray-900">Enable Push Notifications</p>
+                                <p className="text-sm text-gray-500">
+                                    Get notified when someone sends a message in the group chat.
+                                </p>
+                            </div>
+                            <div>
+                                {notificationStatus === 'granted' ? (
+                                    <span className="text-green-600 font-medium text-sm">✓ Enabled</span>
+                                ) : notificationStatus === 'denied' ? (
+                                    <span className="text-red-500 font-medium text-sm">Blocked in browser</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleEnableNotifications}
+                                        className="btn-primary py-1.5 px-3 text-sm"
+                                    >
+                                        Enable
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
