@@ -76,10 +76,15 @@ export const deletePlace = async (placeId) => {
 export const searchForeignPlaces = async (query) => {
     const response = await fetch(`${API_BASE_URL}/api/v1/places/search/foreign?query=${encodeURIComponent(query)}`);
     if (!response.ok) throw new Error('Search failed');
+    // Returns { type: 'SPECIFIC' | 'CATEGORY', results: [...] }
     return await response.json();
 };
 
-// ... existing exports ...
+export const resolvePlaceRecommendation = async (nameKo) => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/places/search/resolve?name_ko=${encodeURIComponent(nameKo)}`);
+    if (!response.ok) throw new Error('Resolve failed');
+    return await response.json();
+};
 
 export const getPlaceDescription = async (placeName, location) => {
     const url = `${API_BASE_URL}/api/v1/places/search/description?place_name=${encodeURIComponent(placeName)}&location=${encodeURIComponent(location || '')}`;

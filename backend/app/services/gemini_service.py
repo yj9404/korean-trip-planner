@@ -397,22 +397,61 @@ Keep it conversational and helpful."""
         return response.text.strip()
 
 
-    async def translate_to_korean(self, text: str) -> str:
-        """Translate English search term to Korean for Naver Map Search"""
-        
-        prompt = f"""Translate the following location search query into Korean for Naver Maps search.
+    async def analyze_search_query(self, text: str) -> dict:
+        """Analyze search intent: SPECIFIC place vs CATEGORY, return structured JSON."""
+
+        prompt = f"""Analyze the following location search query for a trip to Korea.
 Input: '{text}'
-Output: Just the Korean term. No explanations."""
+
+Task 1: Determine if the input is a SPECIFIC place name or a general CATEGORY/intent.
+Task 2: Output ONLY valid JSON based on the classification. Do NOT wrap the JSON in markdown code blocks (like ```json). No explanations.
+
+Case A) If the input is a SPECIFIC place name (e.g., 'Onion Anguk', 'Lotte Tower', 'Gyeongbokgung'):
+Return exactly this JSON format:
+{{
+  "type": "SPECIFIC",
+  "query_ko": "[Translated Korean Name for Naver Search]"
+}}
+
+Case B) If the input is a general CATEGORY, concept, or broad intent (e.g., 'Palace', 'Korean BBQ', 'Good cafe'):
+Recommend 3 to 5 famous and popular specific places in Seoul/Korea that match the query.
+Return exactly this JSON format:
+{{
+  "type": "CATEGORY",
+  "recommendations": [
+    {{
+      "name_ko": "[Specific Korean Name, e.g., 경복궁]",
+      "name_en": "[Specific English Name, e.g., Gyeongbokgung Palace]",
+      "desc_en": "[Short description in English, e.g., The largest royal palace in Seoul.]"
+    }}
+  ]
+}}"""
 
         try:
-            response = await self._safe_generate(
-                model=FLASH_LITE,
-                contents=prompt
-            )
-            return response.text.strip()
+            response = await self._safe_generate(model=FLASH_LITE, contents=prompt)
+            raw = response.text.strip()
+
+            # Strip markdown code fences if any
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            if raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+
+            return json.loads(raw.strip())
+        except json.JSONDecodeError as e:
+            logger.error(f"analyze_search_query: JSON parse error: {e}. Raw: {raw!r}")
+            # Safe fallback: treat as SPECIFIC with original text
+            return {"type": "SPECIFIC", "query_ko": text}
         except Exception as e:
-            logger.error(f"Failed to translate to Korean: {e}")
-            return text  # Fallback to original
+            logger.error(f"analyze_search_query failed: {e}")
+            return {"type": "SPECIFIC", "query_ko": text}
+
+    async def translate_to_korean(self, text: str) -> str:
+        """[DEPRECATED] Use analyze_search_query instead."""
+        result = await self.analyze_search_query(text)
+        return result.get("query_ko", text)
 
     async def translate_results_to_english(self, items: List[dict]) -> List[dict]:
         """Translate Naver search results to English"""

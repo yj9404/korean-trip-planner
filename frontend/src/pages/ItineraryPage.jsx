@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiPlus, FiNavigation, FiCreditCard, FiMapPin, FiSearch, FiLoader, FiX } from 'react-icons/fi';
-import { getPlaces, deletePlace, addPlace, searchForeignPlaces, updatePlace, getPlaceDescription } from '../services/itineraryService';
+import { getPlaces, deletePlace, addPlace, searchForeignPlaces, resolvePlaceRecommendation, updatePlace, getPlaceDescription } from '../services/itineraryService';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -31,7 +31,9 @@ const ItineraryPage = ({ user }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
+    const [searchType, setSearchType] = useState('SPECIFIC'); // 'SPECIFIC' | 'CATEGORY'
     const [isAdding, setIsAdding] = useState(false);
+    const [isResolving, setIsResolving] = useState(false); // resolving a recommendation to coordinates
     const [addDate, setAddDate] = useState(''); // Date selected in the modal
 
     useEffect(() => {
@@ -148,10 +150,13 @@ const ItineraryPage = ({ user }) => {
 
         setIsSearching(true);
         setSearchResults([]);
+        setSearchType('SPECIFIC');
 
         try {
-            const results = await searchForeignPlaces(searchQuery);
-            setSearchResults(results);
+            const data = await searchForeignPlaces(searchQuery);
+            // data = { type: 'SPECIFIC' | 'CATEGORY', results: [...] }
+            setSearchType(data.type || 'SPECIFIC');
+            setSearchResults(data.results || []);
         } catch (error) {
             console.error('Search failed:', error);
             alert('Search failed. Please try again.');
@@ -178,37 +183,47 @@ const ItineraryPage = ({ user }) => {
         }
     };
 
-    // Add Place Handler
+    // Add Place Handler — works for both SPECIFIC results and resolved CATEGORY items
     const handleAddPlace = async (place) => {
-        // Use the date selected in the modal, or fallback to current view date
         const targetDate = addDate || selectedDate || new Date().toISOString().split('T')[0];
 
         try {
             setIsAdding(true);
+
+            // If it's a CATEGORY recommendation (no coordinates yet), resolve first
+            let resolvedPlace = place;
+            if (searchType === 'CATEGORY' && !place.mapx) {
+                setIsResolving(true);
+                try {
+                    resolvedPlace = await resolvePlaceRecommendation(place.title_ko);
+                } catch (err) {
+                    console.error('Resolve failed, using stub:', err);
+                    // Graceful degradation: continue with partial data
+                } finally {
+                    setIsResolving(false);
+                }
+            }
+
             const placeData = {
-                name_en: place.title,
-                name_ko: place.title_ko || place.title,
-                address_en: place.address,
-                address_ko: place.address_ko || place.address,
-                category: place.category,
+                name_en: resolvedPlace.title || place.title,
+                name_ko: resolvedPlace.title_ko || place.title_ko || place.title,
+                address_en: resolvedPlace.address || '',
+                address_ko: resolvedPlace.address_ko || '',
+                category: resolvedPlace.category || place.category,
                 visit_date: targetDate,
-                map_x: place.mapx,
-                map_y: place.mapy,
+                map_x: resolvedPlace.mapx || '',
+                map_y: resolvedPlace.mapy || '',
                 notes: '',
                 order_index: selectedPlaces.length
             };
 
             await addPlace(placeData);
-
-            // Refresh list
             await loadPlaces();
 
-            // Close modal
             setShowAddModal(false);
             setSearchQuery('');
             setSearchResults([]);
-
-            // Ensure we are on the target date
+            setSearchType('SPECIFIC');
             setSelectedDate(targetDate);
 
         } catch (error) {
@@ -216,6 +231,7 @@ const ItineraryPage = ({ user }) => {
             alert('Failed to add place to itinerary.');
         } finally {
             setIsAdding(false);
+            setIsResolving(false);
         }
     };
 
@@ -442,7 +458,14 @@ const ItineraryPage = ({ user }) => {
                             {isSearching && (
                                 <div className="text-center py-8 text-gray-500">
                                     <FiLoader className="animate-spin mx-auto text-3xl mb-3" />
-                                    <p>Translating & Searching Naver Maps...</p>
+                                    <p>Analyzing & Searching...</p>
+                                </div>
+                            )}
+
+                            {isResolving && (
+                                <div className="text-center py-8 text-purple-500">
+                                    <FiLoader className="animate-spin mx-auto text-3xl mb-3" />
+                                    <p>Getting location details...</p>
                                 </div>
                             )}
 
@@ -452,29 +475,62 @@ const ItineraryPage = ({ user }) => {
                                 </div>
                             )}
 
-                            <div className="space-y-3">
-                                {searchResults.map((result, index) => (
-                                    <button
-                                        key={index}
-                                        onClick={() => handleAddPlace(result)}
-                                        disabled={isAdding}
-                                        className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all group"
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h3 className="font-bold text-gray-800 group-hover:text-blue-700">
-                                                    {result.title}
-                                                </h3>
-                                                <p className="text-sm text-gray-600 mt-1">{result.address}</p>
-                                                <p className="text-xs text-gray-400 mt-1">
-                                                    {result.title_ko} • {result.category}
-                                                </p>
+                            {/* CATEGORY: AI Recommendation Cards */}
+                            {searchType === 'CATEGORY' && searchResults.length > 0 && (
+                                <div className="mb-3">
+                                    <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                                        ✨ AI Recommendations
+                                    </p>
+                                    <div className="space-y-3">
+                                        {searchResults.map((result, index) => (
+                                            <button
+                                                key={index}
+                                                onClick={() => handleAddPlace(result)}
+                                                disabled={isAdding || isResolving}
+                                                className="w-full text-left p-4 rounded-lg border border-purple-200 bg-purple-50 hover:border-purple-500 hover:bg-purple-100 transition-all group"
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-800 group-hover:text-purple-700">
+                                                            {result.title}
+                                                        </h3>
+                                                        <p className="text-xs text-purple-500 mt-0.5">{result.title_ko}</p>
+                                                        <p className="text-sm text-gray-600 mt-1">{result.desc_en}</p>
+                                                    </div>
+                                                    {(isAdding || isResolving) && <FiLoader className="animate-spin text-purple-500 mt-1" />}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SPECIFIC: Naver Search Results */}
+                            {searchType === 'SPECIFIC' && (
+                                <div className="space-y-3">
+                                    {searchResults.map((result, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => handleAddPlace(result)}
+                                            disabled={isAdding}
+                                            className="w-full text-left p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 group-hover:text-blue-700">
+                                                        {result.title}
+                                                    </h3>
+                                                    <p className="text-sm text-gray-600 mt-1">{result.address}</p>
+                                                    <p className="text-xs text-gray-400 mt-1">
+                                                        {result.title_ko} • {result.category}
+                                                    </p>
+                                                </div>
+                                                {isAdding && <FiLoader className="animate-spin text-blue-500" />}
                                             </div>
-                                            {isAdding && <FiLoader className="animate-spin text-blue-500" />}
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <button
