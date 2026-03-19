@@ -68,6 +68,7 @@ class GeminiService:
         target = lang_names.get(request.target_lang, request.target_lang)
         
         prompt = f"""Translate the following text from {source} to {target}.
+If the text contains internet slang, informal greetings (e.g., Korean '하염', English 'sup'), or abbreviations, translate them into natural {target}.
 Only provide the translation, without any explanations or additional text.
 
 {f"Context: {request.context}" if request.context else ""}
@@ -185,8 +186,10 @@ Format your response as a numbered list with clear sections."""
         target = lang_names.get(target_lang, target_lang)
         
         prompt = f"""Translate this message from {source} to {target}. 
+If the text contains internet slang or informal greetings in any language (e.g., Korean '하염', '하이', English 'sup', 'brb', 'ttyl'), or typos, translate them appropriately according to their real conversational meaning.
 Only provide the translation, no explanations.
 
+Text:
 {text}
 
 Translation:"""

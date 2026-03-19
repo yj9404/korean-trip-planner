@@ -185,7 +185,7 @@ const ProfilePage = ({ user }) => {
                             </button>
                         </div>
                         <p className="text-sm text-gray-500 mt-2">
-                            Your display name and chat messages will be shown in this language.
+                            Chat messages will be shown in this language.
                         </p>
                     </div>
 

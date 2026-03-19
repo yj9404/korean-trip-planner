@@ -241,7 +241,7 @@ const ChatPage = ({ user }) => {
                                 key={msg.id}
                                 message={msg}
                                 isOwnMessage={msg.sender_id === user.uid}
-                                translatedText={msg.original_lang !== preferences.preferred_lang ? msg.translated_text : null}
+                                translatedText={msg.translated_text || null}
                                 showTranslation={showTranslations[msg.id]}
                                 onToggleTranslation={() => toggleTranslation(msg.id)}
                             />

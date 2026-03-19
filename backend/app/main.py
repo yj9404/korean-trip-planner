@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Korea Trip Planner API",
     description="Backend API for Korea Trip Planner PWA",
-    version="0.1.0",
+    version="0.1.1",
     lifespan=lifespan
 )
 
@@ -78,7 +78,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "Welcome to Korea Trip Planner API",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "docs": "/docs"
     }
 
