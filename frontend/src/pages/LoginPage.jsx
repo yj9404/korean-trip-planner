@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
-    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     GoogleAuthProvider,
     updateProfile
 } from 'firebase/auth';
@@ -45,6 +46,37 @@ const LoginPage = () => {
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     const [googleUser, setGoogleUser] = useState(null);
     const navigate = useNavigate();
+
+    // Google 리다이렉트 로그인 후 결과 처리
+    useEffect(() => {
+        const handleRedirectResult = async () => {
+            try {
+                const result = await getRedirectResult(auth);
+                if (!result) return; // 리다이렉트 결과 없으면 무시
+
+                const user = result.user;
+                const prefsDoc = await getDoc(doc(db, 'user_preferences', user.uid));
+
+                if (prefsDoc.exists() && prefsDoc.data().english_name) {
+                    navigate(getPostLoginRedirect());
+                } else {
+                    if (prefsDoc.exists()) {
+                        const data = prefsDoc.data();
+                        if (data.korean_name) setKoreanName(data.korean_name);
+                        if (data.preferred_lang) setPreferredLang(data.preferred_lang);
+                    }
+                    setGoogleUser(user);
+                    setShowProfileSetup(true);
+                }
+            } catch (err) {
+                if (err.code !== 'auth/no-auth-event') {
+                    setError(getFriendlyErrorMessage(err));
+                }
+            }
+        };
+
+        handleRedirectResult();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // 로그인 성공 후 이동할 대상 결정 (pendingInviteCode 우선)
     const getPostLoginRedirect = () => {
@@ -111,48 +143,15 @@ const LoginPage = () => {
     const handleGoogleSignIn = async () => {
         setError('');
         setLoading(true);
-
         try {
             const provider = new GoogleAuthProvider();
-            const result = await signInWithPopup(auth, provider);
-            const user = result.user;
-
-            // Check if user already has preferences
-            const prefsDoc = await getDoc(doc(db, 'user_preferences', user.uid));
-
-            if (prefsDoc.exists()) {
-                const data = prefsDoc.data();
-
-                // Check if mandatory fields are present (English name is mandatory)
-                if (data.english_name) {
-                    // Existing user with complete profile -> Dashboard or pending invite
-                    navigate(getPostLoginRedirect());
-                } else {
-                    // Existing user but incomplete profile -> Profile Setup
-                    // Pre-fill existing data if available
-                    if (data.korean_name) setKoreanName(data.korean_name);
-                    if (data.english_name) setEnglishName(data.english_name);
-                    if (data.preferred_lang) setPreferredLang(data.preferred_lang);
-
-                    setGoogleUser(user);
-                    setShowProfileSetup(true);
-                    setLoading(false);
-                }
-            } else {
-                // New user -> Profile Setup
-                setGoogleUser(user);
-                setShowProfileSetup(true);
-                setLoading(false);
-            }
+            // signInWithRedirect: WebView(인앱 브라우저)에서도 동작하는 방식
+            // signInWithPopup은 Google의 "Use Secure Browsers" 정책에 의해 WebView에서 차단됨
+            await signInWithRedirect(auth, provider);
+            // 이후 페이지가 리다이렉트됨 -> useEffect의 getRedirectResult에서 처리
         } catch (err) {
-            // Handle popup closed or other errors
-            if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
-                // User closed the popup, just reset loading state
-                setLoading(false);
-            } else {
-                setError(getFriendlyErrorMessage(err));
-                setLoading(false);
-            }
+            setError(getFriendlyErrorMessage(err));
+            setLoading(false);
         }
     };
 
