@@ -48,34 +48,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const messaging = getMessaging(app);
 
-// Handle background FCM messages (app tab not focused / closed)
-onBackgroundMessage(messaging, (payload) => {
-    const { title, body } = payload.notification || {};
-    const url = payload.data?.url || '/chat';
-
-    self.registration.showNotification(title || 'Korea Trip Planner', {
-        body: body || 'New message received',
-        icon: '/icons/icon-192x192.png',
-        badge: '/icons/icon-72x72.png',
-        data: { url },
-    });
-});
-
-// Open the app and navigate when notification is clicked
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close();
-    const url = event.notification.data?.url || '/chat';
-
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-            for (const client of windowClients) {
-                if ('focus' in client) {
-                    client.focus();
-                    client.navigate(url);
-                    return;
-                }
-            }
-            if (clients.openWindow) return clients.openWindow(url);
-        })
-    );
-});
+// FCM automatically handles background 'notification' payloads,
+// including displaying the notification and handling the click
+// via the fcm_options.link provided by the backend!
+// No manual onBackgroundMessage is needed here, preventing duplicate notifications.

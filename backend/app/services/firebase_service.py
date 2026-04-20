@@ -734,6 +734,9 @@ class FirebaseService:
                         body=body,
                         icon="/icons/icon-192x192.png",
                     ),
+                    fcm_options=messaging.WebpushFCMOptions(
+                        link=os.environ.get("FRONTEND_URL", "https://korean-trip-planner.web.app") + data.get("url", "/chat")
+                    ),
                 ),
             )
             response = messaging.send_each_for_multicast(message)

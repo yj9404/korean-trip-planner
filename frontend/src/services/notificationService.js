@@ -30,6 +30,21 @@ export async function requestPermissionAndGetToken() {
             return null;
         }
 
+        // Clean up legacy service worker if it exists
+        try {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const reg of regs) {
+                if (reg.active?.scriptURL.includes('firebase-messaging-sw.js') || 
+                    reg.installing?.scriptURL.includes('firebase-messaging-sw.js') || 
+                    reg.waiting?.scriptURL.includes('firebase-messaging-sw.js')) {
+                    console.info('[FCM] Unregistering legacy SW at scope:', reg.scope);
+                    await reg.unregister();
+                }
+            }
+        } catch (e) {
+            console.warn('[FCM] Error cleaning old SWs:', e);
+        }
+
         const registration = await navigator.serviceWorker.ready;
 
         const token = await getToken(messaging, {

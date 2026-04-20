@@ -280,6 +280,27 @@ const ProfilePage = ({ user }) => {
                                     )}
                                 </div>
                             )}
+
+                            {/* iOS Instructions */}
+                            <div className="text-xs text-blue-700 bg-blue-50 p-3 rounded border border-blue-100 mt-2">
+                                {preferredLang === 'ko' ? (
+                                    <div className="space-y-1">
+                                        <p className="font-bold flex items-center">
+                                            <span>💡 iOS(아이폰) 사용자 안내</span>
+                                        </p>
+                                        <p>1. 사파리(Safari) 앱 하단의 <b>[공유] ➡️ [홈 화면에 추가]</b>를 눌러주세요.</p>
+                                        <p>2. 설치된 홈 화면 앱으로 접속한 뒤, 이 페이지에서 <b>'Enable'</b> 버튼을 눌러야 알림이 활성화됩니다.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        <p className="font-bold flex items-center">
+                                            <span>💡 For iOS (iPhone) users</span>
+                                        </p>
+                                        <p>1. In Safari, tap the <b>[Share] icon ➡️ [Add to Home Screen]</b>.</p>
+                                        <p>2. Open the app from your home screen and click the <b>'Enable'</b> button here to activate notifications.</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
