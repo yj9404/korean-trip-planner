@@ -241,28 +241,45 @@ const ProfilePage = ({ user }) => {
                             Push Notifications
                         </h2>
 
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                            <div>
-                                <p className="font-medium text-gray-900">Enable Push Notifications</p>
-                                <p className="text-sm text-gray-500">
-                                    Get notified when someone sends a message in the group chat.
-                                </p>
+                        <div className="flex flex-col p-4 bg-gray-50 rounded-lg space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium text-gray-900">Enable Push Notifications</p>
+                                    <p className="text-sm text-gray-500">
+                                        Get notified when someone sends a message in the group chat.
+                                    </p>
+                                </div>
+                                <div>
+                                    {notificationStatus === 'granted' ? (
+                                        <span className="text-green-600 font-medium text-sm">✓ Enabled</span>
+                                    ) : notificationStatus === 'denied' ? (
+                                        <span className="text-red-500 font-medium text-sm">Blocked in browser</span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleEnableNotifications}
+                                            className="btn-primary py-1.5 px-3 text-sm"
+                                        >
+                                            Enable
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                            <div>
-                                {notificationStatus === 'granted' ? (
-                                    <span className="text-green-600 font-medium text-sm">✓ Enabled</span>
-                                ) : notificationStatus === 'denied' ? (
-                                    <span className="text-red-500 font-medium text-sm">Blocked in browser</span>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={handleEnableNotifications}
-                                        className="btn-primary py-1.5 px-3 text-sm"
-                                    >
-                                        Enable
-                                    </button>
-                                )}
-                            </div>
+                            {notificationStatus === 'denied' && (
+                                <div className="text-xs text-red-600 bg-red-50 p-3 rounded border border-red-100 mt-2">
+                                    {preferredLang === 'ko' ? (
+                                        <span>
+                                            알림이 차단되었습니다. 브라우저 주소창 왼쪽의 <b>자물쇠(🔒) 또는 설정 아이콘(⚙️)</b>을 클릭하여 
+                                            '알림' 권한을 <b>'허용'</b>으로 변경한 뒤 새로고침해주세요.
+                                        </span>
+                                    ) : (
+                                        <span>
+                                            Notifications are blocked. Click the <b>lock (🔒) or tune (⚙️) icon</b> on the left side of your address bar, 
+                                            change the 'Notifications' permission to <b>'Allow'</b>, and refresh the page.
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 

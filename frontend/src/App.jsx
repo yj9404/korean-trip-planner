@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { auth } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { requestPermissionAndGetToken } from './services/notificationService';
+import { requestPermissionAndGetToken, onForegroundMessage } from './services/notificationService';
 
 // Context
 import { GroupProvider } from './contexts/GroupContext';
@@ -80,17 +80,49 @@ function App() {
     };
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        let fcmUnsubscribe = () => {};
+
+        const setupFCM = async () => {
+            try {
+                const token = await requestPermissionAndGetToken();
+                if (token) {
+                    fcmUnsubscribe = await onForegroundMessage((payload) => {
+                        // Do not show push notification if user is already looking at the chat page
+                        if (window.location.pathname === '/chat') return;
+                        
+                        const { title, body } = payload.notification || {};
+                        const url = payload.data?.url || '/chat';
+                        
+                        if (Notification.permission === 'granted' && title && body) {
+                            navigator.serviceWorker.ready.then((registration) => {
+                                registration.showNotification(title, {
+                                    body: body,
+                                    icon: '/icons/icon-192x192.png',
+                                    badge: '/icons/icon-72x72.png',
+                                    data: { url }
+                                });
+                            });
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn('[FCM] Setup failed:', err);
+            }
+        };
+
+        const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
             setUser(currentUser);
             if (currentUser) {
                 await checkUserGroups(currentUser);
-                // Request notification permission and sync FCM token (non-blocking)
-                requestPermissionAndGetToken().catch(() => {});
+                setupFCM();
             }
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeAuth();
+            if (typeof fcmUnsubscribe === 'function') fcmUnsubscribe();
+        };
     }, []);
 
     if (loading) {
