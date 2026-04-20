@@ -104,6 +104,7 @@ function App() {
                 {user && hasGroup === false ? (
                     <Routes>
                         <Route path="/join/:inviteCode" element={<JoinGroupPage />} />
+                        <Route path="/complete-profile" element={<CompleteProfilePage user={user} />} />
                         <Route
                             path="*"
                             element={

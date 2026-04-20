@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
 import { signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 const OnboardingPage = ({ user, existingGroups = [], onGroupUpdate }) => {
     const navigate = useNavigate();
@@ -16,6 +17,13 @@ const OnboardingPage = ({ user, existingGroups = [], onGroupUpdate }) => {
     useEffect(() => {
         const fetchPendingGroups = async () => {
             try {
+                // 프로필 완성 여부 확인
+                const prefsDoc = await getDoc(doc(db, 'user_preferences', user.uid));
+                if (!prefsDoc.exists() || !prefsDoc.data().english_name) {
+                    navigate('/complete-profile', { replace: true });
+                    return;
+                }
+
                 const token = await user.getIdToken(true);
                 const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/groups/my-pending-groups`, {
                     headers: { 'Authorization': `Bearer ${token}` }

@@ -68,7 +68,13 @@ const CompleteProfilePage = ({ user }) => {
                 display_name: displayName
             }, { merge: true });
 
-            navigate('/dashboard');
+            const code = sessionStorage.getItem('pendingInviteCode');
+            if (code) {
+                sessionStorage.removeItem('pendingInviteCode');
+                navigate(`/join/${code}`);
+            } else {
+                navigate('/dashboard');
+            }
         } catch (err) {
             setError(err.message);
         } finally {

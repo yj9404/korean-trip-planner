@@ -42,7 +42,7 @@ const JoinGroupPage = () => {
                 if (!hasProfile) {
                     // pendingInviteCode 보존: 프로필 완료 후 이 코드로 자동 join
                     sessionStorage.setItem('pendingInviteCode', inviteCode);
-                    navigate('/login', { replace: true });
+                    navigate('/complete-profile', { replace: true });
                     return;
                 }
             } catch (err) {

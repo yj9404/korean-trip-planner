@@ -276,6 +276,18 @@ const ItineraryPage = ({ user }) => {
         return `Day ${index + 1} ${month}.${day} (${dayOfWeek})`;
     };
 
+    // Format 24h time string (HH:MM) to 12h AM/PM (hh:mm AM/PM)
+    const formatTimeDisplay = (timeStr) => {
+        if (!timeStr) return '';
+        const [hours, minutes] = timeStr.split(':');
+        let h = parseInt(hours);
+        const m = minutes;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12; // convert 0 to 12
+        return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+    };
+
     return (
         <div className="flex flex-col h-[calc(100vh-64px)] bg-gray-50">
             {/* Header */}
@@ -356,8 +368,8 @@ const ItineraryPage = ({ user }) => {
                                                                         {preferences.preferred_lang === 'ko' ? place.name_ko : place.name_en}
                                                                     </h3>
                                                                     {place.visit_time && (
-                                                                        <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                                                            {place.visit_time}
+                                                                        <span className="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm border border-blue-100">
+                                                                            {formatTimeDisplay(place.visit_time)}
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -471,6 +483,7 @@ const ItineraryPage = ({ user }) => {
                                         type="time"
                                         value={addTime}
                                         onChange={(e) => setAddTime(e.target.value)}
+                                        lang="en-US"
                                         className="w-full px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
