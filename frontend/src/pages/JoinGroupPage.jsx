@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { auth } from '../services/firebase';
-import { FiUsers, FiLoader } from 'react-icons/fi';
+import { getDoc, doc } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
+import { FiUsers } from 'react-icons/fi';
 
 /**
  * /join/:inviteCode 라우트 핸들러.
- * - 로그인 상태: 바로 join API 호출 → 성공 시 /groups 이동
  * - 비로그인 상태: invite_code를 sessionStorage에 저장 → /login 이동
- *   (LoginPage에서 로그인 완료 후 이 코드를 읽어 자동 가입 처리)
+ * - 로그인했지만 프로필(english_name) 미완성: invite_code 보존 → /login에서 프로필 설정 후 join
+ * - 로그인 + 프로필 완성: join API 호출 → 성공 시 /groups 이동
  */
 const JoinGroupPage = () => {
     const { inviteCode } = useParams();
@@ -32,7 +33,24 @@ const JoinGroupPage = () => {
             if (joinAttempted.current) return;
             joinAttempted.current = true;
 
-            // 로그인 상태: 즉시 join 시도
+            // 프로필(english_name) 완성 여부 확인
+            // 구글 로그인 직후 영어 이름 미등록 상태면 join 전에 프로필 설정 먼저
+            try {
+                const prefsDoc = await getDoc(doc(db, 'user_preferences', currentUser.uid));
+                const hasProfile = prefsDoc.exists() && prefsDoc.data().english_name;
+
+                if (!hasProfile) {
+                    // pendingInviteCode 보존: 프로필 완료 후 이 코드로 자동 join
+                    sessionStorage.setItem('pendingInviteCode', inviteCode);
+                    navigate('/login', { replace: true });
+                    return;
+                }
+            } catch (err) {
+                console.error('Failed to check user profile:', err);
+                // 프로필 확인 실패 시 join은 계속 진행 (graceful degradation)
+            }
+
+            // 로그인 + 프로필 완성: join 시도
             setStatus('joining');
             try {
                 const token = await currentUser.getIdToken(true);
