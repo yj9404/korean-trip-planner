@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGroup } from '../contexts/GroupContext';
 import { auth } from '../services/firebase';
-import { FiUsers, FiLogOut, FiTrash2, FiUserX, FiCheck, FiX, FiUserPlus, FiLink, FiCheckCircle } from 'react-icons/fi';
+import { FiUsers, FiLogOut, FiTrash2, FiUserX, FiCheck, FiX, FiUserPlus, FiLink, FiCheckCircle, FiRefreshCw } from 'react-icons/fi';
 
 const GroupsPage = () => {
     const navigate = useNavigate();
@@ -323,42 +323,74 @@ const GroupsPage = () => {
                             </div>
 
                             {/* Pending Members (Owner only) */}
-                            {currentUserRole === 'OWNER' && pendingMembers.length > 0 && (
+                            {currentUserRole === 'OWNER' && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                        <FiUserPlus />
-                                        Pending Approvals
-                                    </h3>
-                                    <div className="space-y-2">
-                                        {pendingMembers.map((member) => (
-                                            <div key={member.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                                                <span className="text-gray-700">{member.display_name || member.user_id}</span>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => handleApproveMember(member.id, true)}
-                                                        className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
-                                                    >
-                                                        <FiCheck />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleApproveMember(member.id, false)}
-                                                        className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-                                                    >
-                                                        <FiX />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                                            <FiUserPlus />
+                                            Pending Approvals
+                                            {pendingMembers.length > 0 && (
+                                                <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">
+                                                    {pendingMembers.length}
+                                                </span>
+                                            )}
+                                        </h3>
+                                        <button 
+                                            onClick={() => loadGroupDetails(selectedGroup.id)} 
+                                            className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                                            title="Refresh"
+                                            disabled={loading}
+                                        >
+                                            <FiRefreshCw className={loading ? 'animate-spin' : ''} />
+                                        </button>
                                     </div>
+                                    
+                                    {loading && pendingMembers.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">Loading...</p>
+                                    ) : pendingMembers.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">No pending approvals.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {pendingMembers.map((member) => (
+                                                <div key={member.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                                                    <span className="text-gray-700">{member.display_name || member.user_id}</span>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => handleApproveMember(member.id, true)}
+                                                            className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition"
+                                                        >
+                                                            <FiCheck />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleApproveMember(member.id, false)}
+                                                            className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition"
+                                                        >
+                                                            <FiX />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             {/* Members List */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                    <FiUsers />
-                                    Members ({members.length})
-                                </h3>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                                        <FiUsers />
+                                        Members ({members.length})
+                                    </h3>
+                                    <button 
+                                        onClick={() => loadGroupDetails(selectedGroup.id)} 
+                                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                                        title="Refresh"
+                                        disabled={loading}
+                                    >
+                                        <FiRefreshCw className={loading ? 'animate-spin' : ''} />
+                                    </button>
+                                </div>
                                 {loading ? (
                                     <p className="text-gray-500">Loading...</p>
                                 ) : (
