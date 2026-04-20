@@ -80,13 +80,14 @@ function App() {
     };
 
     useEffect(() => {
-        let fcmUnsubscribe = () => {};
+        let isMounted = true;
+        let unsubscribeFCM = null;
 
         const setupFCM = async () => {
             try {
                 const token = await requestPermissionAndGetToken();
                 if (token) {
-                    fcmUnsubscribe = await onForegroundMessage((payload) => {
+                    const unsub = await onForegroundMessage((payload) => {
                         // Do not show push notification if user is already looking at the chat page
                         if (window.location.pathname === '/chat') return;
                         
@@ -104,6 +105,13 @@ function App() {
                             });
                         }
                     });
+                    
+                    if (!isMounted) {
+                        unsub();
+                    } else {
+                        if (unsubscribeFCM) unsubscribeFCM();
+                        unsubscribeFCM = unsub;
+                    }
                 }
             } catch (err) {
                 console.warn('[FCM] Setup failed:', err);
@@ -111,17 +119,20 @@ function App() {
         };
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-            setUser(currentUser);
+            if (isMounted) setUser(currentUser);
             if (currentUser) {
                 await checkUserGroups(currentUser);
-                setupFCM();
+                if (isMounted) setupFCM();
             }
-            setLoading(false);
+            if (isMounted) setLoading(false);
         });
 
         return () => {
+            isMounted = false;
             unsubscribeAuth();
-            if (typeof fcmUnsubscribe === 'function') fcmUnsubscribe();
+            if (typeof unsubscribeFCM === 'function') {
+                unsubscribeFCM();
+            }
         };
     }, []);
 

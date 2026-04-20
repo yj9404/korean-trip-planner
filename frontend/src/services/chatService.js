@@ -171,9 +171,9 @@ export const updateUserPreferences = async (userId, preferences) => {
 /**
  * Subscribe to real-time messages using Firestore
  */
-export const subscribeToMessages = (roomId, callback, errorCallback) => {
+export const subscribeToMessages = (roomId, messageLimit = 50, callback, errorCallback) => {
     const messagesRef = collection(db, 'chat_rooms', roomId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'), limit(50));
+    const q = query(messagesRef, orderBy('timestamp', 'desc'), limit(messageLimit));
 
     return onSnapshot(
         q,
@@ -183,7 +183,7 @@ export const subscribeToMessages = (roomId, callback, errorCallback) => {
                 ...doc.data(),
                 timestamp: doc.data().timestamp?.toDate(),
             }));
-            callback(messages);
+            callback(messages.reverse());
         },
         (error) => {
             console.error('Error subscribing to messages:', error);

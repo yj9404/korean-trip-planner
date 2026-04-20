@@ -192,7 +192,7 @@ class FirebaseService:
             self.db.collection("chat_rooms")
             .document(room_id)
             .collection("messages")
-            .order_by("timestamp", direction=firestore.Query.ASCENDING)
+            .order_by("timestamp", direction=firestore.Query.DESCENDING)
             .limit(limit)
             .stream()
         )
@@ -202,6 +202,7 @@ class FirebaseService:
             data["id"] = doc.id
             messages.append(data)
         
+        messages.reverse()
         return messages
     
     # User preferences operations

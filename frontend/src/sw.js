@@ -15,6 +15,26 @@ import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
+// Immediately take control when a new version is installed.
+// Without this, the new SW waits until all tabs are closed (injectManifest
+// mode does NOT auto-inject skipWaiting unlike generateSW mode).
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
+});
+
+// Also handle the SKIP_WAITING message sent by vite-plugin-pwa's autoUpdate
+// registration script so future updates trigger correctly.
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+});
+
+// Take control of all existing clients as soon as we activate.
+self.addEventListener('activate', (event) => {
+    event.waitUntil(self.clients.claim());
+});
+
 // Firebase config — replaced at build time by Vite (no URL params needed)
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,

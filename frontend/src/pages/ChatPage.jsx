@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { FiSend, FiMessageCircle, FiMessageSquare, FiArrowDown } from 'react-icons/fi';
 import ChatBubble from '../components/ChatBubble';
 import Loading from '../components/Loading';
@@ -25,11 +25,14 @@ const ChatPage = ({ user }) => {
     });
     const [showTranslations, setShowTranslations] = useState({});
     const [showNewMessageBtn, setShowNewMessageBtn] = useState(false);
+    const [messageLimit, setMessageLimit] = useState(50);
 
     const messagesEndRef = useRef(null);
     const chatContainerRef = useRef(null);
     const inputRef = useRef(null);
     const prevMessagesLengthRef = useRef(0);
+    const prevLastMsgIdRef = useRef(null);
+    const scrollStateRef = useRef({ isLoadingMore: false, prevHeight: 0 });
 
     // Load user preferences
     useEffect(() => {
@@ -86,6 +89,7 @@ const ChatPage = ({ user }) => {
 
         const unsubscribe = subscribeToMessages(
             currentRoomId,
+            messageLimit,
             (newMessages) => {
                 setMessages(newMessages);
             },
@@ -95,12 +99,16 @@ const ChatPage = ({ user }) => {
         );
 
         return () => unsubscribe();
-    }, [currentRoomId]);
+    }, [currentRoomId, messageLimit]);
 
     // Smart scroll logic for new messages
     useEffect(() => {
-        if (messages.length > prevMessagesLengthRef.current) {
-            const lastMsg = messages[messages.length - 1];
+        if (messages.length === 0) return;
+
+        const lastMsg = messages[messages.length - 1];
+        const isNewMessageAtBottom = lastMsg.id !== prevLastMsgIdRef.current;
+
+        if (isNewMessageAtBottom) {
             const isMyMessage = lastMsg?.sender_id === user.uid;
 
             let isNearBottom = true;
@@ -119,7 +127,9 @@ const ChatPage = ({ user }) => {
                 setShowNewMessageBtn(true);
             }
         }
+        
         prevMessagesLengthRef.current = messages.length;
+        prevLastMsgIdRef.current = lastMsg.id;
     }, [messages, user.uid]);
 
     const scrollToBottom = () => {
@@ -133,7 +143,21 @@ const ChatPage = ({ user }) => {
         if (isNearBottom) {
             setShowNewMessageBtn(false);
         }
+
+        // Infinite scroll logic: load more if at the top
+        if (scrollTop === 0 && messages.length >= messageLimit) {
+            scrollStateRef.current = { isLoadingMore: true, prevHeight: scrollHeight };
+            setMessageLimit(prev => prev + 50);
+        }
     };
+
+    useLayoutEffect(() => {
+        if (scrollStateRef.current.isLoadingMore && chatContainerRef.current) {
+            const newHeight = chatContainerRef.current.scrollHeight;
+            chatContainerRef.current.scrollTop = newHeight - scrollStateRef.current.prevHeight;
+            scrollStateRef.current.isLoadingMore = false;
+        }
+    }, [messages]);
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
