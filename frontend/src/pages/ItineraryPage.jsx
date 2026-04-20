@@ -35,6 +35,7 @@ const ItineraryPage = ({ user }) => {
     const [isAdding, setIsAdding] = useState(false);
     const [isResolving, setIsResolving] = useState(false); // resolving a recommendation to coordinates
     const [addDate, setAddDate] = useState(''); // Date selected in the modal
+    const [addTime, setAddTime] = useState(''); // Time selected in the modal
 
     useEffect(() => {
         loadPlaces();
@@ -80,9 +81,20 @@ const ItineraryPage = ({ user }) => {
     // Get sorted dates
     const dates = Object.keys(groupedByDate).sort();
 
-    // Get places for selected date, sorted by order_index
+    // Get places for selected date, sorted by visit_time and order_index
     const selectedPlaces = selectedDate
-        ? (groupedByDate[selectedDate] || []).sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+        ? (groupedByDate[selectedDate] || []).sort((a, b) => {
+            const timeA = a.visit_time || '';
+            const timeB = b.visit_time || '';
+            if (timeA && timeB) {
+                return timeA.localeCompare(timeB);
+            } else if (timeA) {
+                return -1;
+            } else if (timeB) {
+                return 1;
+            }
+            return (a.order_index || 0) - (b.order_index || 0);
+        })
         : [];
 
     // Drag & Drop Sensors
@@ -185,7 +197,11 @@ const ItineraryPage = ({ user }) => {
 
     // Add Place Handler — works for both SPECIFIC results and resolved CATEGORY items
     const handleAddPlace = async (place) => {
-        const targetDate = addDate || selectedDate || new Date().toISOString().split('T')[0];
+        const getKoreanDate = () => {
+            const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+        const targetDate = addDate || selectedDate || getKoreanDate();
 
         try {
             setIsAdding(true);
@@ -211,6 +227,7 @@ const ItineraryPage = ({ user }) => {
                 address_ko: resolvedPlace.address_ko || '',
                 category: resolvedPlace.category || place.category,
                 visit_date: targetDate,
+                visit_time: addTime || null,
                 map_x: resolvedPlace.mapx || '',
                 map_y: resolvedPlace.mapy || '',
                 notes: '',
@@ -225,6 +242,7 @@ const ItineraryPage = ({ user }) => {
             setSearchResults([]);
             setSearchType('SPECIFIC');
             setSelectedDate(targetDate);
+            setAddTime('');
 
         } catch (error) {
             console.error('Failed to add place:', error);
@@ -250,10 +268,10 @@ const ItineraryPage = ({ user }) => {
 
     // Format date display
     const formatDateDisplay = (dateStr, index) => {
-        const date = new Date(dateStr);
+        // Parse explicitly from 'YYYY-MM-DD' without local timezone assumptions
+        const [year, month, day] = dateStr.split('-');
+        const date = new Date(year, month - 1, day);
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const month = date.getMonth() + 1;
-        const day = date.getDate();
         const dayOfWeek = dayNames[date.getDay()];
         return `Day ${index + 1} ${month}.${day} (${dayOfWeek})`;
     };
@@ -333,9 +351,16 @@ const ItineraryPage = ({ user }) => {
                                                         {/* Place Info */}
                                                         <div className="mb-3">
                                                             <div className="flex justify-between items-start">
-                                                                <h3 className="text-lg font-bold text-gray-800 mb-1">
-                                                                    {preferences.preferred_lang === 'ko' ? place.name_ko : place.name_en}
-                                                                </h3>
+                                                                <div className="flex items-center flex-wrap gap-2 mb-1">
+                                                                    <h3 className="text-lg font-bold text-gray-800">
+                                                                        {preferences.preferred_lang === 'ko' ? place.name_ko : place.name_en}
+                                                                    </h3>
+                                                                    {place.visit_time && (
+                                                                        <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                                                            {place.visit_time}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                                 <button
                                                                     onPointerDown={(e) => e.stopPropagation()} // Prevent drag start
                                                                     onClick={async (e) => {
@@ -406,7 +431,12 @@ const ItineraryPage = ({ user }) => {
                 <div className="max-w-3xl mx-auto px-4 py-4 flex gap-3">
                     <button
                         onClick={() => {
-                            setAddDate(selectedDate || new Date().toISOString().split('T')[0]);
+                            const getKoreanDate = () => {
+                                const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+                                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                            };
+                            setAddDate(selectedDate || getKoreanDate());
+                            setAddTime('');
                             setShowAddModal(true);
                         }}
                         className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg"
@@ -424,15 +454,26 @@ const ItineraryPage = ({ user }) => {
                         <div className="p-6 border-b">
                             <h2 className="text-xl font-bold text-gray-800 mb-4">Add New Place</h2>
 
-                            {/* Date Selector in Modal */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                                <input
-                                    type="date"
-                                    value={addDate}
-                                    onChange={(e) => setAddDate(e.target.value)}
-                                    className="w-full px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
+                            {/* Date & Time Selector in Modal */}
+                            <div className="mb-4 flex gap-4">
+                                <div className="flex-1">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                    <input
+                                        type="date"
+                                        value={addDate}
+                                        onChange={(e) => setAddDate(e.target.value)}
+                                        className="w-full px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Time (Optional)</label>
+                                    <input
+                                        type="time"
+                                        value={addTime}
+                                        onChange={(e) => setAddTime(e.target.value)}
+                                        className="w-full px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
                             </div>
 
                             <form onSubmit={handleSearch} className="flex gap-2">
