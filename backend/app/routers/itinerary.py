@@ -69,7 +69,8 @@ async def get_places(
 async def update_place(
     place_id: str,
     place_update: PlaceUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    group_id: str = Depends(get_current_group)
 ):
     """Update a place in user's itinerary"""
     user_id = current_user.get("uid")
@@ -82,19 +83,20 @@ async def update_place(
     if "visit_date" in update_data and isinstance(update_data["visit_date"], date):
         update_data["visit_date"] = update_data["visit_date"].isoformat()
     
-    firebase_service.update_place(user_id, place_id, update_data)
+    firebase_service.update_place(user_id, place_id, update_data, group_id)
     return {"message": "Place updated successfully"}
 
 
 @router.delete("/places/{place_id}", response_model=dict)
 async def delete_place(
     place_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    group_id: str = Depends(get_current_group)
 ):
     """Delete a place from user's itinerary"""
     user_id = current_user.get("uid")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found")
     
-    firebase_service.delete_place(user_id, place_id)
+    firebase_service.delete_place(user_id, place_id, group_id)
     return {"message": "Place deleted successfully"}

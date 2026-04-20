@@ -37,12 +37,22 @@ service cloud.firestore {
       }
     }
 
-    // Places: user-scoped
+    // Places: user-scoped (legacy / fallback when no group context)
     match /places/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
       match /items/{placeId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Group Places: shared itinerary visible to all authenticated group members.
+    // Group membership enforcement is handled by the backend.
+    match /group_places/{groupId} {
+      allow read, write: if request.auth != null;
+
+      match /items/{placeId} {
+        allow read, write: if request.auth != null;
       }
     }
 

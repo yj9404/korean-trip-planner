@@ -224,49 +224,61 @@ class FirebaseService:
         return True
     
     
-    # Itinerary / Place operations (user-based, no trip context)
+    # Itinerary / Place operations (group-shared collection)
     def add_place(self, user_id: str, place_data: Dict[str, Any], group_id: Optional[str] = None) -> str:
-        """Add a place to user's itinerary"""
+        """Add a place to the group's shared itinerary.
+        Stored under group_places/{group_id}/items/ so all group members can read.
+        Falls back to a private user collection if no group_id provided.
+        """
         place_data["user_id"] = user_id
-        if group_id:
-            place_data["group_id"] = group_id
-        
+        place_data["group_id"] = group_id
         place_data["created_at"] = datetime.utcnow()
         place_data["updated_at"] = datetime.utcnow()
-        doc_ref = self.db.collection("places").document(user_id).collection("items").document()
+
+        if group_id:
+            doc_ref = self.db.collection("group_places").document(group_id).collection("items").document()
+        else:
+            # Fallback: personal list (no group context)
+            doc_ref = self.db.collection("places").document(user_id).collection("items").document()
+
         doc_ref.set(place_data)
         return doc_ref.id
-    
+
     def get_user_places(self, user_id: str, group_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get all places for a user, ordered by date and index"""
+        """Get all places for a group (or personal list if no group_id)."""
         places = []
-        docs = (
-            self.db.collection("places").document(user_id).collection("items")
-            .order_by("visit_date").stream()
-        )
+        if group_id:
+            docs = (
+                self.db.collection("group_places").document(group_id).collection("items")
+                .order_by("visit_date").stream()
+            )
+        else:
+            docs = (
+                self.db.collection("places").document(user_id).collection("items")
+                .order_by("visit_date").stream()
+            )
         for doc in docs:
             data = doc.to_dict()
-            
-            # Filter by group_id if provided
-            if group_id:
-                if data.get("group_id") != group_id:
-                    continue
-            
             data["id"] = doc.id
             places.append(data)
         return places
-    
-    def update_place(self, user_id: str, place_id: str, place_data: Dict[str, Any]) -> bool:
-        """Update a place in user's itinerary"""
-        # Ensure we don't accidentally remove group_id if not provided
+
+    def update_place(self, user_id: str, place_id: str, place_data: Dict[str, Any], group_id: Optional[str] = None) -> bool:
+        """Update a place. Tries group collection first, falls back to personal."""
         place_data["updated_at"] = datetime.utcnow()
-        doc_ref = self.db.collection("places").document(user_id).collection("items").document(place_id)
-        doc_ref.set(place_data, merge=True) # Change update to set with merge=True for safer partial updates
+        if group_id:
+            doc_ref = self.db.collection("group_places").document(group_id).collection("items").document(place_id)
+        else:
+            doc_ref = self.db.collection("places").document(user_id).collection("items").document(place_id)
+        doc_ref.set(place_data, merge=True)
         return True
-    
-    def delete_place(self, user_id: str, place_id: str) -> bool:
-        """Delete a place from user's itinerary"""
-        self.db.collection("places").document(user_id).collection("items").document(place_id).delete()
+
+    def delete_place(self, user_id: str, place_id: str, group_id: Optional[str] = None) -> bool:
+        """Delete a place. Tries group collection first, falls back to personal."""
+        if group_id:
+            self.db.collection("group_places").document(group_id).collection("items").document(place_id).delete()
+        else:
+            self.db.collection("places").document(user_id).collection("items").document(place_id).delete()
         return True
     
     
