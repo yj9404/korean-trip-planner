@@ -8,11 +8,12 @@ import { getMessagingInstance, VAPID_KEY } from './firebase';
 import { auth } from './firebase';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const FCM_TOKEN_STORAGE_KEY = 'fcm_token';
 
 /**
  * Request notification permission, get FCM token, and sync it to the backend.
- * Safe to call multiple times — exits silently if permission is denied or
- * messaging is not supported (e.g. non-PWA Safari).
+ * Automatically removes the previous token if it changed (e.g. after SW update),
+ * preventing duplicate notifications from stale tokens.
  */
 export async function requestPermissionAndGetToken() {
     console.log('[FCM] Starting requestPermissionAndGetToken...');
@@ -29,12 +30,11 @@ export async function requestPermissionAndGetToken() {
             return null;
         }
 
-        // Wait for the custom service worker registration with URL params to be ready
         const registration = await navigator.serviceWorker.ready;
 
-        const token = await getToken(messaging, { 
+        const token = await getToken(messaging, {
             vapidKey: VAPID_KEY,
-            serviceWorkerRegistration: registration 
+            serviceWorkerRegistration: registration,
         });
 
         if (!token) {
@@ -42,11 +42,17 @@ export async function requestPermissionAndGetToken() {
             return null;
         }
 
-        // Sync token to backend
+        // Remove old token from backend if it changed (happens when SW updates)
+        const prevToken = localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
+        if (prevToken && prevToken !== token) {
+            console.info('[FCM] Token changed — removing old token from backend');
+            await removeTokenFromBackend(prevToken);
+        }
+        localStorage.setItem(FCM_TOKEN_STORAGE_KEY, token);
+
         await syncTokenToBackend(token);
         return token;
     } catch (err) {
-        // Never crash the app due to notification issues
         console.warn('[FCM] Failed to get/sync token:', err);
         return null;
     }
@@ -54,7 +60,6 @@ export async function requestPermissionAndGetToken() {
 
 /**
  * POST the FCM token to our backend so the server can send push notifications.
- * Returns true on success, false on failure.
  */
 async function syncTokenToBackend(token) {
     try {
@@ -81,6 +86,28 @@ async function syncTokenToBackend(token) {
     } catch (err) {
         console.warn('[FCM] Token sync to backend failed:', err);
         return false;
+    }
+}
+
+/**
+ * DELETE a specific FCM token from the backend.
+ */
+async function removeTokenFromBackend(token) {
+    try {
+        const user = auth.currentUser;
+        if (!user) return;
+        const idToken = await user.getIdToken();
+        await fetch(`${API_URL}/api/v1/users/me/fcm-token`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ token }),
+        });
+        console.info('[FCM] Old token removed from backend');
+    } catch (err) {
+        console.warn('[FCM] Old token removal failed:', err);
     }
 }
 

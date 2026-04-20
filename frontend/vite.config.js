@@ -6,6 +6,9 @@ export default defineConfig({
     plugins: [
         react(),
         VitePWA({
+            strategies: 'injectManifest',
+            srcDir: 'src',
+            filename: 'sw.js',
             registerType: 'autoUpdate',
             includeAssets: ['favicon.ico', 'robots.txt', 'icons/*.png'],
             manifest: {
@@ -61,25 +64,8 @@ export default defineConfig({
                     }
                 ]
             },
-            workbox: {
+            injectManifest: {
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-                navigateFallbackDenylist: [/^\/__/],
-                runtimeCaching: [
-                    {
-                        urlPattern: /^https:\/\/api\./i,
-                        handler: 'NetworkFirst',
-                        options: {
-                            cacheName: 'api-cache',
-                            expiration: {
-                                maxEntries: 100,
-                                maxAgeSeconds: 60 * 60 * 24 // 24 hours
-                            },
-                            cacheableResponse: {
-                                statuses: [0, 200]
-                            }
-                        }
-                    }
-                ]
             }
         })
     ],

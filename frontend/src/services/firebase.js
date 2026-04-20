@@ -37,16 +37,9 @@ export const getMessagingInstance = async () => {
         return null;
     }
     try {
-        // Explicitly register our custom SW with config via URL parameters
-        // This prevents hardcoding the API key in the public JS file
-        const swUrl = new URL('/firebase-messaging-sw.js', window.location.origin);
-        for (const [key, value] of Object.entries(firebaseConfig)) {
-            if (value) swUrl.searchParams.append(key, value);
-        }
-
-        await navigator.serviceWorker.register(swUrl.toString(), {
-            scope: '/',
-        });
+        // The combined SW (sw.js) is registered automatically by vite-plugin-pwa.
+        // Wait for it to be active before initializing messaging.
+        await navigator.serviceWorker.ready;
         _messaging = getMessaging(app);
         return _messaging;
     } catch (err) {
