@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    signInWithPopup,
     signInWithRedirect,
     getRedirectResult,
     GoogleAuthProvider,
@@ -12,6 +13,14 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { FiMail, FiLock, FiMap, FiUser, FiX } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
+
+// WebView(카카오, 인스타 등 인앱 브라우저) 감지
+// signInWithPopup은 WebView에서 Google 정책으로 막히므로, WebView일 때만 redirect 사용
+const isWebView = () => {
+    const ua = navigator.userAgent;
+    return /KAKAOTALK|Line|NAVER|Instagram|FB_IAB|FBAN|Twitter|wv|WebView/i.test(ua)
+        || (ua.includes('Android') && ua.includes('wv'));
+};
 
 const getFriendlyErrorMessage = (error) => {
     switch (error.code) {
@@ -143,14 +152,37 @@ const LoginPage = () => {
     const handleGoogleSignIn = async () => {
         setError('');
         setLoading(true);
+        const provider = new GoogleAuthProvider();
+
         try {
-            const provider = new GoogleAuthProvider();
-            // signInWithRedirect: WebView(인앱 브라우저)에서도 동작하는 방식
-            // signInWithPopup은 Google의 "Use Secure Browsers" 정책에 의해 WebView에서 차단됨
-            await signInWithRedirect(auth, provider);
-            // 이후 페이지가 리다이렉트됨 -> useEffect의 getRedirectResult에서 처리
+            if (isWebView()) {
+                // WebView(카카오톡, 인스타 등 인앱 브라우저): popup이 Google 정책으로 차단되므로 redirect 사용
+                // 페이지가 리다이렉트됨 -> useEffect의 getRedirectResult에서 처리
+                await signInWithRedirect(auth, provider);
+            } else {
+                // 일반 브라우저(노트북 Chrome, Safari 등): popup 방식 사용
+                // redirect 방식은 third-party cookie 정책 변화로 일부 환경에서 silently fail함
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
+                const prefsDoc = await getDoc(doc(db, 'user_preferences', user.uid));
+
+                if (prefsDoc.exists() && prefsDoc.data().english_name) {
+                    navigate(getPostLoginRedirect());
+                } else {
+                    if (prefsDoc.exists()) {
+                        const data = prefsDoc.data();
+                        if (data.korean_name) setKoreanName(data.korean_name);
+                        if (data.preferred_lang) setPreferredLang(data.preferred_lang);
+                    }
+                    setGoogleUser(user);
+                    setShowProfileSetup(true);
+                }
+            }
         } catch (err) {
-            setError(getFriendlyErrorMessage(err));
+            // popup이 사용자에 의해 닫힌 경우 에러 무시
+            if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+                setError(getFriendlyErrorMessage(err));
+            }
             setLoading(false);
         }
     };
