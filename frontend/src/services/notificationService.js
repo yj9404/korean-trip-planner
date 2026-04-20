@@ -54,13 +54,17 @@ export async function requestPermissionAndGetToken() {
 
 /**
  * POST the FCM token to our backend so the server can send push notifications.
+ * Returns true on success, false on failure.
  */
 async function syncTokenToBackend(token) {
     try {
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user) {
+            console.warn('[FCM] Cannot sync token: no authenticated user');
+            return false;
+        }
         const idToken = await user.getIdToken();
-        await fetch(`${API_URL}/api/v1/users/me/fcm-token`, {
+        const res = await fetch(`${API_URL}/api/v1/users/me/fcm-token`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -68,8 +72,15 @@ async function syncTokenToBackend(token) {
             },
             body: JSON.stringify({ token }),
         });
+        if (!res.ok) {
+            console.warn(`[FCM] Token sync failed with status ${res.status}`);
+            return false;
+        }
+        console.info('[FCM] Token synced to backend successfully');
+        return true;
     } catch (err) {
         console.warn('[FCM] Token sync to backend failed:', err);
+        return false;
     }
 }
 

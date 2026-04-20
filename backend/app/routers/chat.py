@@ -142,21 +142,25 @@ async def send_message(room_id: str, message_data: ChatMessageCreate):
                 sender_id = message_data.sender_id
                 sender_name = message_dict.get("sender_name", "Someone")
                 token_map = await firebase_service.get_group_member_fcm_tokens(group_id)
-                # Collect tokens for all members except the sender
-                recipient_tokens = [
-                    token
+                logger.info(f"[FCM] Found tokens for {len(token_map)} group members")
+                # Build recipient map (exclude sender) for token cleanup support
+                recipient_map = {
+                    uid: tokens
                     for uid, tokens in token_map.items()
                     if uid != sender_id
-                    for token in tokens
-                ]
+                }
+                recipient_tokens = [t for tokens in recipient_map.values() for t in tokens]
+                logger.info(f"[FCM] Sending push to {len(recipient_tokens)} tokens for {len(recipient_map)} recipients")
                 if recipient_tokens:
                     push_body = message_data.text[:100]  # Truncate long messages
-                    await firebase_service.send_push_notifications(
+                    success = await firebase_service.send_push_notifications(
                         tokens=recipient_tokens,
                         title=f"New message from {sender_name}",
                         body=push_body,
                         data={"url": "/chat"},
+                        uid_token_map=recipient_map,
                     )
+                    logger.info(f"[FCM] {success}/{len(recipient_tokens)} notifications sent successfully")
         except Exception as push_err:
             logger.warning(f"Push notification failed (non-critical): {push_err}")
 

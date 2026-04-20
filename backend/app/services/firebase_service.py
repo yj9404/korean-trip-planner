@@ -685,6 +685,7 @@ class FirebaseService:
                 for doc in members_docs
                 if doc.to_dict().get("status") == "ACTIVE"
             ]
+            print(f"[FCM] Active members in group {group_id}: {len(active_user_ids)}")
             if not active_user_ids:
                 return result
 
@@ -696,8 +697,12 @@ class FirebaseService:
                     tokens = data.get("fcm_tokens", [])
                     if tokens:
                         result[doc.id] = tokens
+                    else:
+                        print(f"[FCM] User {doc.id} has no FCM tokens saved")
+                else:
+                    print(f"[FCM] No user_preferences doc for user {doc.id}")
         except Exception as e:
-            print(f"Error fetching group FCM tokens: {e}")
+            print(f"[FCM] Error fetching group FCM tokens: {e}")
         return result
 
     async def send_push_notifications(
@@ -706,15 +711,18 @@ class FirebaseService:
         title: str,
         body: str,
         data: Optional[Dict[str, str]] = None,
-        user_id_for_cleanup: Optional[str] = None,
+        uid_token_map: Optional[Dict[str, List[str]]] = None,
     ) -> int:
         """Send FCM push notifications to a list of tokens.
         Automatically cleans up invalid/expired tokens.
+        uid_token_map: {uid: [token, ...]} used to find which user owns a bad token for cleanup.
         Returns the number of successful sends.
         """
         if not tokens:
             return 0
         try:
+            # WebpushFCMOptions.link must be a full HTTPS URL — omit it and let
+            # the SW's notificationclick handler handle navigation via data.url.
             message = messaging.MulticastMessage(
                 notification=messaging.Notification(title=title, body=body),
                 data=data or {},
@@ -725,15 +733,14 @@ class FirebaseService:
                         body=body,
                         icon="/icons/icon-192x192.png",
                     ),
-                    fcm_options=messaging.WebpushFCMOptions(
-                        link=data.get("url", "/chat") if data else "/chat"
-                    ),
                 ),
             )
             response = messaging.send_each_for_multicast(message)
-            # Clean up invalid tokens
-            if user_id_for_cleanup and response.failure_count > 0:
-                invalid_tokens = [
+            print(f"[FCM] Push result: {response.success_count} success, {response.failure_count} failure out of {len(tokens)} tokens")
+
+            # Clean up invalid/expired tokens
+            if response.failure_count > 0:
+                invalid_token_set = {
                     tokens[i]
                     for i, resp in enumerate(response.responses)
                     if not resp.success
@@ -742,12 +749,21 @@ class FirebaseService:
                         "messaging/registration-token-not-registered",
                         "messaging/invalid-registration-token",
                     )
-                ]
-                for bad_token in invalid_tokens:
-                    await self.remove_fcm_token(user_id_for_cleanup, bad_token)
+                }
+                if invalid_token_set and uid_token_map:
+                    for uid, uid_tokens in uid_token_map.items():
+                        for bad_token in uid_tokens:
+                            if bad_token in invalid_token_set:
+                                await self.remove_fcm_token(uid, bad_token)
+                                print(f"[FCM] Removed invalid token for user {uid}")
+                # Log non-cleanup failures
+                for i, resp in enumerate(response.responses):
+                    if not resp.success:
+                        print(f"[FCM] Failed token {tokens[i][:20]}...: {resp.exception}")
+
             return response.success_count
         except Exception as e:
-            print(f"Error sending push notifications: {e}")
+            print(f"[FCM] Error sending push notifications: {e}")
             return 0
 
 
