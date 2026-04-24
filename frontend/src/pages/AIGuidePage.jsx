@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { apiService } from '../services/api';
 import { FiCompass, FiSend, FiMapPin, FiCalendar } from 'react-icons/fi';
+import ReactMarkdown from 'react-markdown';
 
 const AIGuidePage = () => {
     const [query, setQuery] = useState('');
@@ -118,7 +119,13 @@ const AIGuidePage = () => {
                                                 : 'bg-gray-100 text-gray-900'
                                             }`}
                                     >
-                                        <p className="whitespace-pre-wrap">{message.content}</p>
+                                        {message.role === 'assistant' ? (
+                                            <div className="prose max-w-none prose-p:leading-relaxed prose-a:text-blue-600 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 break-words">
+                                                <ReactMarkdown>{message.content}</ReactMarkdown>
+                                            </div>
+                                        ) : (
+                                            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                                        )}
                                     </div>
                                 </div>
                             ))}

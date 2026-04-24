@@ -14,6 +14,71 @@ const SortableItem = ({ id, children }) => {
 import { getUserPreferences } from '../services/chatService';
 import TaxiCardModal from '../components/TaxiCardModal';
 
+// Custom Time Picker to enforce AM/PM in english (bypasses OS locale)
+const CustomTimePicker = ({ value, onChange }) => {
+    const currentHour = value ? parseInt(value.split(':')[0], 10) : '';
+    const currentMin = value ? value.split(':')[1] : '';
+    const isPM = currentHour !== '' ? currentHour >= 12 : false;
+    const h12 = currentHour !== '' ? (currentHour % 12 === 0 ? 12 : currentHour % 12) : '';
+    const ampm = value !== '' ? (isPM ? 'PM' : 'AM') : 'AM';
+
+    const handleUpdate = (newH12, newMin, newAmpm) => {
+        if (!newH12 && !newMin) {
+            onChange('');
+            return;
+        }
+        let h24 = parseInt(newH12 || '12', 10);
+        if (newAmpm === 'PM' && h24 !== 12) h24 += 12;
+        if (newAmpm === 'AM' && h24 === 12) h24 = 0;
+        onChange(`${String(h24).padStart(2, '0')}:${newMin || '00'}`);
+    };
+
+    return (
+        <div className="flex items-center w-full px-3 py-2 bg-gray-100 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 border border-transparent">
+            <select
+                className="bg-transparent focus:outline-none text-center cursor-pointer font-medium text-gray-700"
+                value={h12}
+                onChange={(e) => handleUpdate(e.target.value, currentMin, ampm)}
+            >
+                <option value="">Hr</option>
+                {[...Array(12)].map((_, i) => (
+                    <option key={i+1} value={i+1}>{String(i+1).padStart(2, '0')}</option>
+                ))}
+            </select>
+            <span className="text-gray-500 font-bold mx-1">:</span>
+            <select
+                className="bg-transparent focus:outline-none text-center cursor-pointer font-medium text-gray-700"
+                value={currentMin}
+                onChange={(e) => handleUpdate(h12, e.target.value, ampm)}
+            >
+                <option value="">Min</option>
+                {Array.from({length: 60}, (_, i) => String(i).padStart(2, '0')).map(m => (
+                    <option key={m} value={m}>{m}</option>
+                ))}
+            </select>
+            <div className="flex-1"></div>
+            <select
+                className="bg-transparent focus:outline-none font-bold text-blue-600 cursor-pointer"
+                value={ampm}
+                onChange={(e) => handleUpdate(h12 || '12', currentMin || '00', e.target.value)}
+            >
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+            </select>
+            {value && (
+                <button
+                    type="button"
+                    className="ml-2 text-gray-400 hover:text-red-500"
+                    onClick={() => onChange('')}
+                    title="Clear Time"
+                >
+                    <FiX size={16} />
+                </button>
+            )}
+        </div>
+    );
+};
+
 const ItineraryPage = ({ user }) => {
     const [places, setPlaces] = useState([]);
     const [preferences, setPreferences] = useState({ preferred_lang: 'en' });
@@ -467,7 +532,7 @@ const ItineraryPage = ({ user }) => {
                             <h2 className="text-xl font-bold text-gray-800 mb-4">Add New Place</h2>
 
                             {/* Date & Time Selector in Modal */}
-                            <div className="mb-4 flex gap-4">
+                            <div className="mb-4 flex flex-col sm:flex-row gap-4">
                                 <div className="flex-1">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                                     <input
@@ -479,12 +544,9 @@ const ItineraryPage = ({ user }) => {
                                 </div>
                                 <div className="flex-1">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Time (Optional)</label>
-                                    <input
-                                        type="time"
-                                        value={addTime}
-                                        onChange={(e) => setAddTime(e.target.value)}
-                                        lang="en-US"
-                                        className="w-full px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    <CustomTimePicker 
+                                        value={addTime} 
+                                        onChange={setAddTime} 
                                     />
                                 </div>
                             </div>

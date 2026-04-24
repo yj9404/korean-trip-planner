@@ -1,5 +1,6 @@
 import React from 'react';
 import { FiUser, FiMessageCircle } from 'react-icons/fi';
+import ReactMarkdown from 'react-markdown';
 
 // 사용자 고유 색상을 만들기 위한 해시 함수 및 색상 배열
 const COLORS = [
@@ -72,9 +73,15 @@ const ChatBubble = ({ message, isOwnMessage, translatedText, onToggleTranslation
                                 : 'bg-gray-100 text-gray-900 shadow-sm border border-gray-200'
                             }`}
                     >
-                        <p className="text-sm whitespace-pre-wrap break-words">
-                            {message.text}
-                        </p>
+                        {isAIBot ? (
+                            <div className="text-sm prose prose-sm max-w-none prose-p:leading-relaxed prose-headings:text-purple-900 prose-p:text-purple-900 prose-strong:text-purple-900 prose-ul:text-purple-900 prose-li:text-purple-900 prose-a:text-purple-700 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 break-words">
+                                <ReactMarkdown>{message.text}</ReactMarkdown>
+                            </div>
+                        ) : (
+                            <p className="text-sm whitespace-pre-wrap break-words">
+                                {message.text}
+                            </p>
+                        )}
 
                         {/* Translation Toggle */}
                         {translatedText && !isAIBot && (
