@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth } from '../services/firebase';
 import {
     FiUpload, FiImage, FiVideo, FiTrash2, FiCalendar,
-    FiChevronLeft, FiChevronRight, FiX, FiCheck, FiLoader, FiPlus, FiDownload
+    FiChevronLeft, FiChevronRight, FiX, FiCheck, FiLoader, FiPlus
 } from 'react-icons/fi';
 
 const API = import.meta.env.VITE_API_URL;
@@ -25,7 +25,6 @@ const GalleryPage = ({ user }) => {
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [deleting, setDeleting] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
-    const [downloading, setDownloading] = useState(false);
     const fileInputRef = useRef(null);
 
     const getHeaders = async () => {
@@ -204,38 +203,6 @@ const GalleryPage = ({ user }) => {
         setDeleting(false);
     };
 
-    // Download selected
-    const handleDownloadSelected = async () => {
-        if (!selectedIds.size) return;
-        setDownloading(true);
-
-        try {
-            const ids = Array.from(selectedIds);
-            const itemsToDownload = media.filter(m => selectedIds.has(m.file_id));
-
-            for (const item of itemsToDownload) {
-                try {
-                    const response = await fetch(`${API}${item.serve_url}`);
-                    if (!response.ok) throw new Error(`Network response was not ok for ${item.original_name}`);
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = item.original_name || 'download';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(url);
-                } catch (err) {
-                    console.error('Download failed for item:', item, err);
-                }
-            }
-        } finally {
-            setDownloading(false);
-            exitSelectMode();
-        }
-    };
-
     // Exit select mode
     const exitSelectMode = () => {
         setSelectMode(false);
@@ -287,25 +254,13 @@ const GalleryPage = ({ user }) => {
                                 <button
                                     onClick={exitSelectMode}
                                     className="px-4 py-2.5 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium"
-                                    disabled={deleting || downloading}
+                                    disabled={deleting}
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={handleDownloadSelected}
-                                    disabled={!selectedIds.size || deleting || downloading}
-                                    className="flex items-center space-x-2 px-5 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-50 text-sm font-medium"
-                                >
-                                    {downloading ? (
-                                        <FiLoader className="animate-spin" />
-                                    ) : (
-                                        <FiDownload />
-                                    )}
-                                    <span>Download {selectedIds.size > 0 ? selectedIds.size : ''}</span>
-                                </button>
-                                <button
                                     onClick={handleDeleteSelected}
-                                    disabled={!selectedIds.size || deleting || downloading}
+                                    disabled={!selectedIds.size || deleting}
                                     className="flex items-center space-x-2 px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-sm disabled:opacity-50 text-sm font-medium"
                                 >
                                     {deleting ? (
