@@ -155,11 +155,37 @@ async def list_dates(
 
 @router.get("/file/{group_id}/{date_label}/{filename}")
 async def serve_file(group_id: str, date_label: str, filename: str):
-    """Serve a locally stored media file."""
+    """Serve a locally stored media file, fallback to Drive download if ephemeral."""
     path = get_local_file_path(group_id, date_label, filename)
-    if not path:
+    if path:
+        return FileResponse(path)
+
+    # If not found locally, it might have been purged (Cloud Run ephemeral disk).
+    # Look it up in Firestore and download from Drive if possible.
+    db = firebase_service.db
+    query = db.collection("groups").document(group_id)\
+              .collection("media").where("filename", "==", filename).limit(1)
+
+    import anyio.to_thread
+
+    def fetch_docs():
+        return list(query.stream())
+
+    docs = await anyio.to_thread.run_sync(fetch_docs)
+
+    if not docs:
         raise HTTPException(404, "File not found")
-    return FileResponse(path)
+
+    data = docs[0].to_dict()
+    drive_url = data.get("drive_url")
+
+    if drive_url:
+        from app.services.storage_service import download_from_google_drive
+        new_path = await download_from_google_drive(drive_url, group_id, date_label, filename)
+        if new_path:
+            return FileResponse(new_path)
+
+    raise HTTPException(404, "File not found locally or on Drive")
 
 
 @router.delete("/{file_id}")

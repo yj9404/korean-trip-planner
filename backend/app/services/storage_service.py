@@ -255,3 +255,92 @@ async def background_drive_upload(
         })
     except Exception as e:
         logger.error(f"Failed to update Firestore after Drive upload: {e}")
+
+async def download_from_google_drive(
+    drive_url: str,
+    group_id: str,
+    date_label: str,
+    filename: str,
+) -> Optional[Path]:
+    """Download a file from Google Drive to local storage."""
+    import re
+    import json
+    import os
+    import io
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseDownload
+    from google.oauth2 import service_account
+    from google.oauth2.credentials import Credentials
+    from app.config import settings
+
+    # Extract Drive file ID
+    match = re.search(r"/d/([a-zA-Z0-9_-]+)", drive_url)
+    if not match:
+        logger.error(f"Could not parse Drive file ID from URL: {drive_url}")
+        return None
+    file_id = match.group(1)
+
+    try:
+        drive_cred = None
+
+        # 1. Try OAuth 2.0
+        if settings.google_refresh_token and settings.google_client_id and settings.google_client_secret:
+            try:
+                drive_cred = Credentials(
+                    token=None,
+                    refresh_token=settings.google_refresh_token,
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=settings.google_client_id,
+                    client_secret=settings.google_client_secret,
+                )
+            except Exception as e:
+                logger.error(f"Failed to use Refresh Token for download: {e}")
+
+        # 2. Fallback to Service Account
+        if not drive_cred:
+            svc_info: dict | None = None
+            if settings.firebase_credentials_json:
+                svc_info = json.loads(settings.firebase_credentials_json)
+            elif settings.firebase_credentials_path and os.path.exists(settings.firebase_credentials_path):
+                with open(settings.firebase_credentials_path) as f:
+                    svc_info = json.load(f)
+
+            if svc_info:
+                drive_cred = service_account.Credentials.from_service_account_info(
+                    svc_info,
+                    scopes=["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive.readonly"],
+                )
+            else:
+                logger.error("Drive download: No credentials found")
+                return None
+
+        service = build("drive", "v3", credentials=drive_cred)
+
+        target_dir = UPLOAD_DIR / group_id / date_label
+        target_dir.mkdir(parents=True, exist_ok=True)
+        file_path = target_dir / filename
+
+        tmp_file_path = file_path.with_suffix('.tmp')
+
+        # Download file synchronously
+        def do_download():
+            request = service.files().get_media(fileId=file_id)
+            with io.FileIO(tmp_file_path, "wb") as fh:
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while done is False:
+                    status, done = downloader.next_chunk()
+
+        # Run blocking network and file I/O in threadpool
+        import anyio.to_thread
+        await anyio.to_thread.run_sync(do_download)
+
+        # Atomically rename to prevent serving corrupted partial files
+        tmp_file_path.rename(file_path)
+
+        logger.info(f"Drive download success: {file_id} -> {file_path}")
+        return file_path
+
+    except Exception as e:
+        logger.error(f"Drive download failed for {filename} ({file_id}): {e}")
+        return None
