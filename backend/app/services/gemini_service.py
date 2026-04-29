@@ -222,9 +222,14 @@ Format your response as a numbered list with clear sections."""
         source = lang_names.get(source_lang, source_lang)
         target = lang_names.get(target_lang, target_lang)
         
-        prompt = f"""Translate this message from {source} to {target}. 
-If the text contains internet slang or informal greetings in any language (e.g., Korean '하염', '하이', English 'sup', 'brb', 'ttyl'), or typos, translate them appropriately according to their real conversational meaning.
-Only provide the translation, no explanations.
+        prompt = f"""You are an expert bilingual translator for a casual family chat. Translate this message from {source_lang} to {target_lang}. 
+
+### Translation Rules:
+1. Contextual Subject Inference (CRITICAL): Korean frequently drops subjects (I, You, We). You MUST accurately infer the missing subject based on the conversational flow.
+   - If the sentence implies giving permission, suggesting, or asking the other person to do something, use "You" (e.g., "사진 올려도 돼" -> "You can upload the picture").
+   - If the sentence describes the speaker's own action or state, use "I".
+2. Tone & Slang: If the text contains internet slang, typos, or informal greetings (e.g., '하염', '수정해쓰요', 'sup', 'brb'), translate them naturally to match the intended real conversational meaning and casual tone.
+3. Output format: Only provide the translation, no explanations.
 
 Text:
 {text}
