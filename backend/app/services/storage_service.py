@@ -38,13 +38,12 @@ def _get_media_type(filename: str) -> str:
     return "video"
 
 
-def _build_public_image_url(drive_file_id: str) -> str:
-    """Build a publicly accessible image URL for a Drive file.
+def _build_thumbnail_url(drive_file_id: str, size: int = 1000) -> str:
+    """Build a resizable Google Drive thumbnail URL.
 
-    Requires the file to have 'anyone:reader' permission set.
-    Works without a Google login session in the browser.
+    The `sz=w{size}` parameter controls the max width.
     """
-    return f"https://drive.google.com/uc?export=view&id={drive_file_id}"
+    return f"https://drive.google.com/thumbnail?id={drive_file_id}&sz=w{size}"
 
 
 def _get_drive_service():
@@ -185,8 +184,8 @@ async def upload_to_drive_direct(
     except Exception as e:
         logger.warning(f"Could not set public permission on {drive_file_id}: {e}")
 
-    public_url = _build_public_image_url(drive_file_id)
-    logger.info(f"Drive upload success: {group_id}/{date_label}/{original_filename} -> {public_url}")
+    thumbnail_url = _build_thumbnail_url(drive_file_id)
+    logger.info(f"Drive upload success: {group_id}/{date_label}/{original_filename} -> {thumbnail_url}")
 
     return {
         "file_id": file_id,
@@ -198,7 +197,7 @@ async def upload_to_drive_direct(
         "date_label": date_label,
         "group_id": group_id,
         "drive_file_id": drive_file_id,
-        "image_url": public_url,   # ← public uc?export=view URL, stored in Firestore
+        "image_url": thumbnail_url,
         "drive_status": "done",
         "created_at": datetime.utcnow().isoformat(),
     }
