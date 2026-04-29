@@ -43,11 +43,42 @@ const GalleryPage = ({ user }) => {
     const longPressActive = useRef(false);
     // Keep an unsubscribe reference for the active lightbox listener
     const likesUnsubRef = useRef(null);
+    // Tracks whether we pushed a history entry for the current lightbox
+    const lightboxHistoryRef = useRef(false);
 
     const showToast = (msg) => {
         setToast(msg);
         setTimeout(() => setToast(''), 3000);
     };
+
+    // Push a history entry when lightbox opens so the back button can close it
+    useEffect(() => {
+        if (lightboxItem && !lightboxHistoryRef.current) {
+            history.pushState({ lightbox: true }, '');
+            lightboxHistoryRef.current = true;
+        }
+    }, [lightboxItem]);
+
+    // Android back button: close lightbox instead of navigating away
+    useEffect(() => {
+        const handlePopState = () => {
+            if (lightboxHistoryRef.current) {
+                lightboxHistoryRef.current = false;
+                setLightboxItem(null);
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    // Close lightbox and consume the history entry we pushed
+    const closeLightbox = useCallback(() => {
+        if (lightboxHistoryRef.current) {
+            history.back(); // triggers popstate → setLightboxItem(null)
+        } else {
+            setLightboxItem(null);
+        }
+    }, []);
 
     const getHeaders = async () => {
         const token = await auth.currentUser?.getIdToken();
@@ -339,7 +370,7 @@ const GalleryPage = ({ user }) => {
             });
             if (res.ok) {
                 setMedia(prev => prev.filter(m => m.file_id !== fileId));
-                if (lightboxItem?.file_id === fileId) setLightboxItem(null);
+                if (lightboxItem?.file_id === fileId) closeLightbox();
             }
         } catch (e) {
             console.error('Delete failed:', e);
@@ -838,11 +869,11 @@ const GalleryPage = ({ user }) => {
             {lightboxItem && (
                 <div
                     className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center"
-                    onClick={() => setLightboxItem(null)}
+                    onClick={closeLightbox}
                 >
                     <button
                         className="absolute top-4 right-4 p-2 text-white/70 hover:text-white"
-                        onClick={() => setLightboxItem(null)}
+                        onClick={closeLightbox}
                     >
                         <FiX className="text-3xl" />
                     </button>
