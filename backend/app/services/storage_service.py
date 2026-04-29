@@ -38,13 +38,13 @@ def _get_media_type(filename: str) -> str:
     return "video"
 
 
-def _build_thumbnail_url(file_id: str, size: int = 1000) -> str:
-    """Build a resizable Google Drive thumbnail URL.
+def _build_public_image_url(drive_file_id: str) -> str:
+    """Build a publicly accessible image URL for a Drive file.
 
-    The `sz=w{size}` parameter controls the max width.
-    The Drive folder must be shared as 'Anyone with the link' for this to work.
+    Requires the file to have 'anyone:reader' permission set.
+    Works without a Google login session in the browser.
     """
-    return f"https://drive.google.com/thumbnail?id={file_id}&sz=w{size}"
+    return f"https://drive.google.com/uc?export=view&id={drive_file_id}"
 
 
 def _get_drive_service():
@@ -172,10 +172,21 @@ async def upload_to_drive_direct(
     ).execute()
 
     drive_file_id = result.get("id")
-    # Use a high-resolution thumbnail URL (resizable via sz parameter)
-    thumbnail_url = _build_thumbnail_url(drive_file_id, size=1000)
 
-    logger.info(f"Drive upload success: {group_id}/{date_label}/{original_filename} -> file_id={drive_file_id}")
+    # Make the file publicly readable (Anyone with the link → no Google login required).
+    # NOTE: Folder-level sharing does NOT automatically propagate to API-created files.
+    try:
+        service.permissions().create(
+            fileId=drive_file_id,
+            body={"type": "anyone", "role": "reader"},
+            supportsAllDrives=True,
+        ).execute()
+        logger.info(f"Set public permission on Drive file {drive_file_id}")
+    except Exception as e:
+        logger.warning(f"Could not set public permission on {drive_file_id}: {e}")
+
+    public_url = _build_public_image_url(drive_file_id)
+    logger.info(f"Drive upload success: {group_id}/{date_label}/{original_filename} -> {public_url}")
 
     return {
         "file_id": file_id,
@@ -187,7 +198,7 @@ async def upload_to_drive_direct(
         "date_label": date_label,
         "group_id": group_id,
         "drive_file_id": drive_file_id,
-        "image_url": thumbnail_url,           # ← Drive thumbnail, stored in Firestore
+        "image_url": public_url,   # ← public uc?export=view URL, stored in Firestore
         "drive_status": "done",
         "created_at": datetime.utcnow().isoformat(),
     }

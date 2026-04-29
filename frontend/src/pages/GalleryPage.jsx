@@ -16,7 +16,7 @@ const GalleryPage = ({ user }) => {
     const [selectedDate, setSelectedDate] = useState(null); // null = all
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
+    const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0, current: '' });
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [uploadDate, setUploadDate] = useState(new Date().toISOString().split('T')[0]);
     const [showUploadModal, setShowUploadModal] = useState(false);
@@ -112,55 +112,61 @@ const GalleryPage = ({ user }) => {
         setError('');
     };
 
-    // Upload
+    // Upload — sequential per-file so progress updates after each one
     const handleUpload = async () => {
         if (!selectedFiles.length) return;
 
         setUploading(true);
-        setUploadProgress({ done: 0, total: selectedFiles.length });
+        setUploadProgress({ done: 0, total: selectedFiles.length, current: '' });
         setError('');
 
-        try {
-            const token = await auth.currentUser?.getIdToken();
-            const formData = new FormData();
-            formData.append('date_label', uploadDate);
-            selectedFiles.forEach(({ file }) => formData.append('files', file));
+        const token = await auth.currentUser?.getIdToken();
+        let successCount = 0;
+        const allDuplicates = [];
+        const allErrors = [];
 
-            const res = await fetch(`${API}/api/v1/media/upload`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-                body: formData,
-            });
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const { file } = selectedFiles[i];
+            setUploadProgress({ done: i, total: selectedFiles.length, current: file.name });
 
-            if (res.ok) {
-                const result = await res.json();
-                setUploadProgress({ done: result.total, total: selectedFiles.length });
+            try {
+                const formData = new FormData();
+                formData.append('date_label', uploadDate);
+                formData.append('files', file);
 
-                if (result.duplicates?.length) {
-                    setDuplicates(result.duplicates);
-                }
-                if (result.errors?.length) {
-                    setError(`${result.errors.length} file(s) failed to upload`);
-                }
+                const res = await fetch(`${API}/api/v1/media/upload`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                });
 
-                if (result.total > 0 || result.duplicates?.length) {
-                    setTimeout(() => {
-                        setShowUploadModal(false);
-                        setSelectedFiles([]);
-                        setDuplicates([]);
-                        loadDates();
-                        loadMedia(selectedDate);
-                        setUploading(false);
-                    }, result.duplicates?.length ? 1500 : 500);
+                if (res.ok) {
+                    const result = await res.json();
+                    successCount += result.total;
+                    if (result.duplicates?.length) allDuplicates.push(...result.duplicates);
+                    if (result.errors?.length) allErrors.push(...result.errors);
                 } else {
-                    setUploading(false);
+                    allErrors.push({ file: file.name, error: 'Upload failed' });
                 }
-            } else {
-                setError('Upload failed. Please try again.');
-                setUploading(false);
+            } catch (e) {
+                allErrors.push({ file: file.name, error: 'Upload failed' });
             }
-        } catch (e) {
-            setError('Upload failed. Please try again.');
+        }
+
+        setUploadProgress({ done: successCount, total: selectedFiles.length, current: '' });
+        if (allDuplicates.length) setDuplicates(allDuplicates);
+        if (allErrors.length) setError(`${allErrors.length} file(s) failed to upload`);
+
+        if (successCount > 0 || allDuplicates.length) {
+            setTimeout(() => {
+                setShowUploadModal(false);
+                setSelectedFiles([]);
+                setDuplicates([]);
+                loadDates();
+                loadMedia(selectedDate);
+                setUploading(false);
+            }, allDuplicates.length ? 1500 : 500);
+        } else {
             setUploading(false);
         }
     };
@@ -194,7 +200,7 @@ const GalleryPage = ({ user }) => {
                 next.delete(fileId);
             } else {
                 if (next.size >= 30) {
-                    showToast('최대 30장까지만 선택 가능합니다');
+                    showToast('Maximum 30 items can be selected');
                     return prev;
                 }
                 next.add(fileId);
@@ -238,12 +244,12 @@ const GalleryPage = ({ user }) => {
             .slice(0, 30);
 
         if (!targets.length) {
-            showToast('다운로드 가능한 이미지가 없습니다');
+            showToast('No downloadable images found');
             return;
         }
 
         setProcessing(true);
-        setProcessMsg('이미지를 가져오는 중입니다…');
+        setProcessMsg('Fetching images...');
 
         try {
             // Step 1: Fetch all blobs in parallel
@@ -266,7 +272,7 @@ const GalleryPage = ({ user }) => {
                 });
             } else {
                 // Step 3: JSZip fallback (desktop / unsupported browser)
-                setProcessMsg('ZIP으로 압축 중입니다…');
+                setProcessMsg('Compressing to ZIP...');
                 const zip = new JSZip();
                 blobs.forEach(file => zip.file(file.name, file));
                 const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -275,7 +281,7 @@ const GalleryPage = ({ user }) => {
         } catch (e) {
             if (e?.name !== 'AbortError') {
                 console.error('Download failed:', e);
-                showToast('다운로드에 실패했습니다. 다시 시도해주세요.');
+                showToast('Download failed. Please try again.');
             }
         } finally {
             setProcessing(false);
@@ -330,7 +336,7 @@ const GalleryPage = ({ user }) => {
                                     className="px-4 py-2.5 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium"
                                     disabled={deleting}
                                 >
-                                    취소
+                                    Cancel
                                 </button>
                                 <button
                                     onClick={handleDeleteSelected}
@@ -338,7 +344,7 @@ const GalleryPage = ({ user }) => {
                                     className="flex items-center space-x-2 px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-sm disabled:opacity-50 text-sm font-medium"
                                 >
                                     {deleting ? <FiLoader className="animate-spin" /> : <FiTrash2 />}
-                                    <span>삭제 {selectedIds.size > 0 ? selectedIds.size : ''}</span>
+                                    <span>Delete {selectedIds.size > 0 ? selectedIds.size : ''}</span>
                                 </button>
                             </>
                         ) : (
@@ -582,11 +588,18 @@ const GalleryPage = ({ user }) => {
                                 </div>
                             )}
                             {uploading ? (
-                                <div className="flex items-center justify-center space-x-3 py-2">
-                                    <FiLoader className="animate-spin text-primary-500 text-xl" />
-                                    <span className="text-sm text-gray-600">
-                                        Uploading... {uploadProgress.done}/{uploadProgress.total}
-                                    </span>
+                                <div className="flex flex-col items-center justify-center space-y-2 py-3">
+                                    <div className="flex items-center space-x-3">
+                                        <FiLoader className="animate-spin text-primary-500 text-xl shrink-0" />
+                                        <span className="text-sm text-gray-700 font-medium">
+                                            Uploading {uploadProgress.done + 1}/{uploadProgress.total}
+                                        </span>
+                                    </div>
+                                    {uploadProgress.current && (
+                                        <p className="text-xs text-gray-400 truncate max-w-xs text-center">
+                                            {uploadProgress.current}
+                                        </p>
+                                    )}
                                 </div>
                             ) : (
                                 <button
@@ -647,7 +660,7 @@ const GalleryPage = ({ user }) => {
                             <span className={selectedIds.size >= 30 ? 'text-yellow-400' : 'text-white'}>
                                 {selectedIds.size}
                             </span>
-                            <span className="text-white/50"> / 30 선택됨</span>
+                            <span className="text-white/50"> / 30 selected</span>
                         </span>
                         <button
                             onClick={handleDownloadSelected}
@@ -655,7 +668,7 @@ const GalleryPage = ({ user }) => {
                             className="flex items-center space-x-2 px-4 py-2 bg-blue-500 rounded-xl text-sm font-semibold disabled:opacity-40 active:bg-blue-600 transition-colors"
                         >
                             <FiDownload />
-                            <span>다운로드</span>
+                            <span>Download</span>
                         </button>
                     </div>
                 </div>
