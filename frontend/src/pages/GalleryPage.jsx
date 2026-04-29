@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth } from '../services/firebase';
 import {
     FiUpload, FiImage, FiVideo, FiTrash2, FiCalendar,
-    FiX, FiCheck, FiLoader, FiPlus, FiDownload
+    FiX, FiCheck, FiLoader, FiPlus, FiDownload, FiPlay
 } from 'react-icons/fi';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -459,8 +459,19 @@ const GalleryPage = ({ user }) => {
                                                     loading="lazy"
                                                 />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                                                    <FiVideo className="text-white text-3xl" />
+                                                <div className="relative w-full h-full bg-gray-900">
+                                                    <img
+                                                        src={item.image_url}
+                                                        alt={item.original_name}
+                                                        className="w-full h-full object-cover"
+                                                        loading="lazy"
+                                                        onError={e => { e.currentTarget.style.display = 'none'; }}
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <div className="w-10 h-10 bg-black/60 rounded-full flex items-center justify-center">
+                                                            <FiPlay className="text-white text-lg ml-0.5" />
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             )}
 
@@ -637,11 +648,13 @@ const GalleryPage = ({ user }) => {
                                 className="max-w-full max-h-[85vh] object-contain rounded-lg"
                             />
                         ) : (
-                            <video
-                                src={lightboxItem.image_url}
-                                controls
-                                autoPlay
-                                className="max-w-full max-h-[85vh] rounded-lg"
+                            <iframe
+                                src={`https://drive.google.com/file/d/${lightboxItem.drive_file_id}/preview`}
+                                className="w-[80vw] max-w-[900px] rounded-lg"
+                                style={{ aspectRatio: '16/9' }}
+                                allow="autoplay"
+                                allowFullScreen
+                                title={lightboxItem.original_name}
                             />
                         )}
                         <div className="text-center mt-3 text-white/60 text-sm">
