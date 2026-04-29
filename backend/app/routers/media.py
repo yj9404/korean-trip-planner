@@ -1,22 +1,15 @@
 """Media upload/list/delete API for gallery and chat."""
 
-import asyncio
 import logging
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 
 from app.services.firebase_service import firebase_service
 from app.dependencies import get_current_user, get_current_group
-from app.services.storage_service import (
-    save_file_locally,
-    get_local_file_path,
-    delete_local_file,
-    background_drive_upload,
-    ALLOWED_EXTENSIONS,
-)
+from app.services.storage_service import upload_to_drive_direct, ALLOWED_EXTENSIONS
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/media", tags=["Media"])
@@ -24,19 +17,25 @@ router = APIRouter(prefix="/media", tags=["Media"])
 
 @router.post("/upload")
 async def upload_media(
-    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     date_label: str = Form(...),  # "2026-02-20"
     current_user: dict = Depends(get_current_user),
     current_group_id: str = Depends(get_current_group),
 ):
-    """Upload up to 30 files at once. Saves locally, then async uploads to Drive.
+    """Upload up to 30 files at once. Uploads directly to Google Drive and
+    stores the thumbnailLink as `image_url` in Firestore.
     Skips files that are exact duplicates (same SHA-256 hash) within the group.
+
+    ⚠️  PM 안내: Google Drive 업로드 대상 폴더의 공유 권한을
+        '링크가 있는 모든 사용자(뷰어)'로 반드시 변경해야 이미지가 정상 렌더링됩니다.
     """
     import hashlib
 
     if len(files) > 30:
         raise HTTPException(400, "Maximum 30 files per upload")
+
+    if not settings.google_drive_folder_id:
+        raise HTTPException(500, "Google Drive folder not configured (GOOGLE_DRIVE_FOLDER_ID)")
 
     group_id = current_group_id
     uploader_id = current_user["uid"]
@@ -64,16 +63,19 @@ async def upload_media(
                 })
                 continue
 
-            meta = save_file_locally(content, f.filename, group_id, date_label)
+            # Upload directly to Google Drive — no local temp file
+            meta = await upload_to_drive_direct(
+                file_bytes=content,
+                original_filename=f.filename,
+                group_id=group_id,
+                date_label=date_label,
+                folder_id=settings.google_drive_folder_id,
+            )
             meta["uploader_id"] = uploader_id
             meta["uploader_name"] = uploader_name
 
-            # Save metadata to Firestore
-            doc_ref = media_col.document(meta["file_id"])
-            doc_ref.set(meta)
-
-            # Schedule async Drive upload
-            background_tasks.add_task(_run_drive_upload, meta, db)
+            # Save metadata (including image_url) to Firestore
+            media_col.document(meta["file_id"]).set(meta)
 
             results.append({
                 "file_id": meta["file_id"],
@@ -82,7 +84,8 @@ async def upload_media(
                 "media_type": meta["media_type"],
                 "size": meta["size"],
                 "date_label": meta["date_label"],
-                "drive_status": "pending",
+                "image_url": meta["image_url"],
+                "drive_status": "done",
             })
         except ValueError as e:
             errors.append({"file": f.filename, "error": str(e)})
@@ -96,12 +99,6 @@ async def upload_media(
         "errors": errors,
         "total": len(results),
     }
-
-
-async def _run_drive_upload(meta: dict, db):
-    """Wrapper to run the async drive upload in background."""
-    from app.config import settings
-    await background_drive_upload(meta, db, folder_id=settings.google_drive_folder_id)
 
 
 @router.get("/list")
@@ -126,10 +123,6 @@ async def list_media(
     items = []
     for doc in docs:
         data = doc.to_dict()
-        # Build serve URL for local files
-        data["serve_url"] = f"/api/v1/media/file/{group_id}/{data['date_label']}/{data['filename']}"
-        # Build thumbnail URL (same as serve for now)
-        data["thumbnail_url"] = data["serve_url"]
         items.append(data)
 
     return items
@@ -153,22 +146,13 @@ async def list_dates(
     return dates
 
 
-@router.get("/file/{group_id}/{date_label}/{filename}")
-async def serve_file(group_id: str, date_label: str, filename: str):
-    """Serve a locally stored media file."""
-    path = get_local_file_path(group_id, date_label, filename)
-    if not path:
-        raise HTTPException(404, "File not found")
-    return FileResponse(path)
-
-
 @router.delete("/{file_id}")
 async def delete_media(
     file_id: str,
     current_user: dict = Depends(get_current_user),
     current_group_id: str = Depends(get_current_group),
 ):
-    """Delete a media file (local + Firestore)."""
+    """Delete a media file (Drive + Firestore)."""
     group_id = current_group_id
     db = firebase_service.db
 
@@ -185,14 +169,18 @@ async def delete_media(
     if data.get("uploader_id") != current_user["uid"]:
         raise HTTPException(403, "Not authorized to delete this file")
 
-    # 1. Delete Firestore document first (so UI updates immediately)
+    # Delete from Firestore
     doc_ref.delete()
 
-    # 2. Delete local file — best-effort; on Windows the file may be
-    #    locked by an active FileResponse, so we silently ignore errors.
-    try:
-        delete_local_file(group_id, data["date_label"], data["filename"])
-    except Exception as e:
-        logger.warning(f"Could not delete local file for {file_id}: {e}")
+    # Best-effort: delete from Google Drive
+    drive_file_id = data.get("drive_file_id")
+    if drive_file_id:
+        try:
+            from app.services.storage_service import _get_drive_service
+            service = _get_drive_service()
+            service.files().delete(fileId=drive_file_id, supportsAllDrives=True).execute()
+            logger.info(f"Deleted Drive file {drive_file_id} for media {file_id}")
+        except Exception as e:
+            logger.warning(f"Could not delete Drive file {drive_file_id}: {e}")
 
     return {"status": "deleted", "file_id": file_id}

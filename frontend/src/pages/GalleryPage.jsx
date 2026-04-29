@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth } from '../services/firebase';
 import {
     FiUpload, FiImage, FiVideo, FiTrash2, FiCalendar,
-    FiChevronLeft, FiChevronRight, FiX, FiCheck, FiLoader, FiPlus
+    FiX, FiCheck, FiLoader, FiPlus, FiDownload
 } from 'react-icons/fi';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -25,7 +27,17 @@ const GalleryPage = ({ user }) => {
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [deleting, setDeleting] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
+    // Download processing state
+    const [processing, setProcessing] = useState(false);      // true while fetching blobs / zipping
+    const [processMsg, setProcessMsg] = useState('');          // message shown in overlay
+    // Toast notification
+    const [toast, setToast] = useState('');                    // '' = hidden
     const fileInputRef = useRef(null);
+
+    const showToast = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(''), 3000);
+    };
 
     const getHeaders = async () => {
         const token = await auth.currentUser?.getIdToken();
@@ -174,12 +186,19 @@ const GalleryPage = ({ user }) => {
         }
     };
 
-    // Toggle selection
+    // Toggle selection — hard cap at 30
     const toggleSelect = (fileId) => {
         setSelectedIds(prev => {
             const next = new Set(prev);
-            if (next.has(fileId)) next.delete(fileId);
-            else next.add(fileId);
+            if (next.has(fileId)) {
+                next.delete(fileId);
+            } else {
+                if (next.size >= 30) {
+                    showToast('최대 30장까지만 선택 가능합니다');
+                    return prev;
+                }
+                next.add(fileId);
+            }
             return next;
         });
     };
@@ -207,6 +226,61 @@ const GalleryPage = ({ user }) => {
     const exitSelectMode = () => {
         setSelectMode(false);
         setSelectedIds(new Set());
+    };
+
+    // Download selected — Web Share API (mobile) with JSZip fallback (desktop)
+    const handleDownloadSelected = async () => {
+        if (!selectedIds.size) return;
+
+        // Collect image_url from currently visible media list
+        const targets = media
+            .filter(m => selectedIds.has(m.file_id) && m.media_type === 'image' && m.image_url)
+            .slice(0, 30);
+
+        if (!targets.length) {
+            showToast('다운로드 가능한 이미지가 없습니다');
+            return;
+        }
+
+        setProcessing(true);
+        setProcessMsg('이미지를 가져오는 중입니다…');
+
+        try {
+            // Step 1: Fetch all blobs in parallel
+            const blobs = await Promise.all(
+                targets.map(async (item) => {
+                    const res = await fetch(item.image_url);
+                    if (!res.ok) throw new Error(`Failed to fetch ${item.original_name}`);
+                    const blob = await res.blob();
+                    const ext = item.original_name.split('.').pop() || 'jpg';
+                    const filename = item.original_name || `photo_${item.file_id}.${ext}`;
+                    return new File([blob], filename, { type: blob.type });
+                })
+            );
+
+            // Step 2: Web Share API (iOS / Android native share sheet)
+            if (navigator.canShare && navigator.canShare({ files: blobs })) {
+                await navigator.share({
+                    files: blobs,
+                    title: '여행 사진',
+                });
+            } else {
+                // Step 3: JSZip fallback (desktop / unsupported browser)
+                setProcessMsg('ZIP으로 압축 중입니다…');
+                const zip = new JSZip();
+                blobs.forEach(file => zip.file(file.name, file));
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                saveAs(zipBlob, 'album.zip');
+            }
+        } catch (e) {
+            if (e?.name !== 'AbortError') {
+                console.error('Download failed:', e);
+                showToast('다운로드에 실패했습니다. 다시 시도해주세요.');
+            }
+        } finally {
+            setProcessing(false);
+            setProcessMsg('');
+        }
     };
 
     // Thumbnail click handler
@@ -256,19 +330,15 @@ const GalleryPage = ({ user }) => {
                                     className="px-4 py-2.5 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium"
                                     disabled={deleting}
                                 >
-                                    Cancel
+                                    취소
                                 </button>
                                 <button
                                     onClick={handleDeleteSelected}
                                     disabled={!selectedIds.size || deleting}
                                     className="flex items-center space-x-2 px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-sm disabled:opacity-50 text-sm font-medium"
                                 >
-                                    {deleting ? (
-                                        <FiLoader className="animate-spin" />
-                                    ) : (
-                                        <FiTrash2 />
-                                    )}
-                                    <span>Delete {selectedIds.size > 0 ? selectedIds.size : ''}</span>
+                                    {deleting ? <FiLoader className="animate-spin" /> : <FiTrash2 />}
+                                    <span>삭제 {selectedIds.size > 0 ? selectedIds.size : ''}</span>
                                 </button>
                             </>
                         ) : (
@@ -377,7 +447,7 @@ const GalleryPage = ({ user }) => {
                                         >
                                             {item.media_type === 'image' ? (
                                                 <img
-                                                    src={`${API}${item.serve_url}`}
+                                                    src={item.image_url}
                                                     alt={item.original_name}
                                                     className="w-full h-full object-cover"
                                                     loading="lazy"
@@ -549,13 +619,13 @@ const GalleryPage = ({ user }) => {
                     <div className="max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
                         {lightboxItem.media_type === 'image' ? (
                             <img
-                                src={`${API}${lightboxItem.serve_url}`}
+                                src={lightboxItem.image_url}
                                 alt={lightboxItem.original_name}
                                 className="max-w-full max-h-[85vh] object-contain rounded-lg"
                             />
                         ) : (
                             <video
-                                src={`${API}${lightboxItem.serve_url}`}
+                                src={lightboxItem.image_url}
                                 controls
                                 autoPlay
                                 className="max-w-full max-h-[85vh] rounded-lg"
@@ -565,6 +635,45 @@ const GalleryPage = ({ user }) => {
                             {lightboxItem.original_name} • {formatDateLabel(lightboxItem.date_label)}
                             {lightboxItem.uploader_name && ` • by ${lightboxItem.uploader_name}`}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Floating action bar (select mode) ── */}
+            {selectMode && (
+                <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
+                    <div className="pointer-events-auto w-full max-w-sm bg-gray-900 text-white rounded-2xl shadow-2xl px-5 py-3 flex items-center justify-between">
+                        <span className="text-sm font-medium">
+                            <span className={selectedIds.size >= 30 ? 'text-yellow-400' : 'text-white'}>
+                                {selectedIds.size}
+                            </span>
+                            <span className="text-white/50"> / 30 선택됨</span>
+                        </span>
+                        <button
+                            onClick={handleDownloadSelected}
+                            disabled={!selectedIds.size || processing}
+                            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 rounded-xl text-sm font-semibold disabled:opacity-40 active:bg-blue-600 transition-colors"
+                        >
+                            <FiDownload />
+                            <span>다운로드</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Processing overlay ── */}
+            {processing && (
+                <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center justify-center space-y-4">
+                    <FiLoader className="text-white text-5xl animate-spin" />
+                    <p className="text-white text-base font-medium">{processMsg}</p>
+                </div>
+            )}
+
+            {/* ── Toast notification ── */}
+            {toast && (
+                <div className="fixed bottom-36 left-0 right-0 z-50 flex justify-center px-6 pointer-events-none">
+                    <div className="bg-gray-800 text-white text-sm px-5 py-3 rounded-2xl shadow-lg">
+                        {toast}
                     </div>
                 </div>
             )}
