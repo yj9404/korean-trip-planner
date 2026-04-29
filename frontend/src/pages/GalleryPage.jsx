@@ -71,13 +71,11 @@ const GalleryPage = ({ user }) => {
         return () => window.removeEventListener('popstate', handlePopState);
     }, []);
 
-    // Close lightbox and consume the history entry we pushed
+    // Close lightbox directly. If a history entry was pushed for the lightbox,
+    // it will be silently consumed on the next back press (same URL = invisible navigation).
     const closeLightbox = useCallback(() => {
-        if (lightboxHistoryRef.current) {
-            history.back(); // triggers popstate → setLightboxItem(null)
-        } else {
-            setLightboxItem(null);
-        }
+        lightboxHistoryRef.current = false;
+        setLightboxItem(null);
     }, []);
 
     const getHeaders = async () => {
