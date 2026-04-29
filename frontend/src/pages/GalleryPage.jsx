@@ -718,7 +718,7 @@ const GalleryPage = ({ user }) => {
 
                                             {/* Heart badge (grid, read-only) */}
                                             {!selectMode && (likes[item.file_id]?.count ?? 0) > 0 && (
-                                                <div className="absolute top-1.5 left-1.5 flex items-center space-x-0.5 bg-black/50 rounded-full px-1.5 py-0.5">
+                                                <div className="absolute bottom-1.5 left-1.5 flex items-center space-x-0.5 bg-black/50 rounded-full px-1.5 py-0.5">
                                                     <FiHeart className="text-rose-400 text-xs fill-rose-400" />
                                                     <span className="text-white text-xs font-medium leading-none">
                                                         {likes[item.file_id].count}
