@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { auth } from '../services/firebase';
 import {
     FiUpload, FiImage, FiVideo, FiTrash2, FiCalendar,
@@ -34,6 +34,8 @@ const GalleryPage = ({ user }) => {
     // Toast notification
     const [toast, setToast] = useState('');                    // '' = hidden
     const fileInputRef = useRef(null);
+    const longPressTimer = useRef(null);
+    const longPressActive = useRef(false);
 
     const showToast = (msg) => {
         setToast(msg);
@@ -113,12 +115,67 @@ const GalleryPage = ({ user }) => {
         setError('');
     };
 
-    // Upload — sequential per-file so progress updates after each one
+    // Direct-to-Drive upload for videos: creates a resumable session on backend,
+    // then PUTs the file straight to Google Drive (bypasses Cloud Run size/timeout limits)
+    const uploadVideoViaDrive = (file, token, onProgress) => new Promise(async (resolve, reject) => {
+        try {
+            const sessionForm = new FormData();
+            sessionForm.append('filename', file.name);
+            sessionForm.append('date_label', uploadDate);
+            sessionForm.append('file_size', file.size);
+
+            const sessionRes = await fetch(`${API}/api/v1/media/create-upload-session`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: sessionForm,
+            });
+            if (!sessionRes.ok) throw new Error('Session creation failed');
+            const { session_uri } = await sessionRes.json();
+
+            // Upload directly to Google Drive via XHR to track per-byte progress
+            const driveFileId = await new Promise((res2, rej2) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', session_uri);
+                xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+                };
+                xhr.onload = () => {
+                    if (xhr.status === 200 || xhr.status === 201) {
+                        try { res2(JSON.parse(xhr.responseText).id); }
+                        catch { rej2(new Error('Invalid Drive response')); }
+                    } else {
+                        rej2(new Error(`Drive upload failed: ${xhr.status}`));
+                    }
+                };
+                xhr.onerror = () => rej2(new Error('Network error during Drive upload'));
+                xhr.send(file);
+            });
+
+            const finalForm = new FormData();
+            finalForm.append('drive_file_id', driveFileId);
+            finalForm.append('original_name', file.name);
+            finalForm.append('date_label', uploadDate);
+            finalForm.append('file_size', file.size);
+
+            const finalRes = await fetch(`${API}/api/v1/media/finalize-upload`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: finalForm,
+            });
+            if (!finalRes.ok) throw new Error('Finalize failed');
+            resolve(await finalRes.json());
+        } catch (e) {
+            reject(e);
+        }
+    });
+
+    // Upload — videos go directly to Drive; images go through Cloud Run
     const handleUpload = async () => {
         if (!selectedFiles.length) return;
 
         setUploading(true);
-        setUploadProgress({ done: 0, total: selectedFiles.length, current: '' });
+        setUploadProgress({ done: 0, total: selectedFiles.length, current: '', percent: 0 });
         setError('');
 
         const token = await auth.currentUser?.getIdToken();
@@ -128,33 +185,46 @@ const GalleryPage = ({ user }) => {
 
         for (let i = 0; i < selectedFiles.length; i++) {
             const { file } = selectedFiles[i];
-            setUploadProgress({ done: i, total: selectedFiles.length, current: file.name });
+            setUploadProgress({ done: i + 1, total: selectedFiles.length, current: file.name, percent: 0 });
+
+            const isVideo = file.type.startsWith('video/');
 
             try {
-                const formData = new FormData();
-                formData.append('date_label', uploadDate);
-                formData.append('files', file);
-
-                const res = await fetch(`${API}/api/v1/media/upload`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}` },
-                    body: formData,
-                });
-
-                if (res.ok) {
-                    const result = await res.json();
-                    successCount += result.total;
-                    if (result.duplicates?.length) allDuplicates.push(...result.duplicates);
-                    if (result.errors?.length) allErrors.push(...result.errors);
+                if (isVideo) {
+                    const result = await uploadVideoViaDrive(file, token, (percent) => {
+                        setUploadProgress(prev => ({ ...prev, percent }));
+                    });
+                    if (result.status === 'duplicate') {
+                        allDuplicates.push({ file: file.name, existing_date: '' });
+                    } else {
+                        successCount++;
+                    }
                 } else {
-                    allErrors.push({ file: file.name, error: 'Upload failed' });
+                    const formData = new FormData();
+                    formData.append('date_label', uploadDate);
+                    formData.append('files', file);
+
+                    const res = await fetch(`${API}/api/v1/media/upload`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}` },
+                        body: formData,
+                    });
+
+                    if (res.ok) {
+                        const result = await res.json();
+                        successCount += result.total;
+                        if (result.duplicates?.length) allDuplicates.push(...result.duplicates);
+                        if (result.errors?.length) allErrors.push(...result.errors);
+                    } else {
+                        allErrors.push({ file: file.name, error: 'Upload failed' });
+                    }
                 }
             } catch (e) {
-                allErrors.push({ file: file.name, error: 'Upload failed' });
+                allErrors.push({ file: file.name, error: e.message || 'Upload failed' });
             }
         }
 
-        setUploadProgress({ done: successCount, total: selectedFiles.length, current: '' });
+        setUploadProgress({ done: selectedFiles.length, total: selectedFiles.length, current: '', percent: 100 });
         if (allDuplicates.length) setDuplicates(allDuplicates);
         if (allErrors.length) setError(`${allErrors.length} file(s) failed to upload`);
 
@@ -292,12 +362,35 @@ const GalleryPage = ({ user }) => {
 
     // Thumbnail click handler
     const handleItemClick = (item) => {
+        if (longPressActive.current) {
+            longPressActive.current = false;
+            return;
+        }
         if (selectMode) {
             toggleSelect(item.file_id);
         } else {
             setLightboxItem(item);
         }
     };
+
+    // Long press handlers
+    const handleTouchStart = useCallback((item) => (e) => {
+        longPressActive.current = false;
+        longPressTimer.current = setTimeout(() => {
+            longPressActive.current = true;
+            if (!selectMode) setSelectMode(true);
+            toggleSelect(item.file_id);
+        }, 500);
+    }, [selectMode]);
+
+    const handleTouchEnd = useCallback(() => {
+        clearTimeout(longPressTimer.current);
+    }, []);
+
+    const handleTouchMove = useCallback(() => {
+        clearTimeout(longPressTimer.current);
+        longPressActive.current = false;
+    }, []);
 
     // Cleanup previews
     useEffect(() => {
@@ -463,6 +556,9 @@ const GalleryPage = ({ user }) => {
                                                 : 'hover:ring-2 hover:ring-primary-400'
                                                 }`}
                                             onClick={() => handleItemClick(item)}
+                                            onTouchStart={handleTouchStart(item)}
+                                            onTouchEnd={handleTouchEnd}
+                                            onTouchMove={handleTouchMove}
                                         >
                                             {item.media_type === 'image' ? (
                                                 <img
@@ -517,7 +613,7 @@ const GalleryPage = ({ user }) => {
                                             {!selectMode && item.uploader_id === user?.uid && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleDelete(item.file_id); }}
-                                                    className={`absolute bottom-1.5 right-1.5 w-7 h-7 bg-red-500/80 rounded-full flex items-center justify-center transition-opacity hover:bg-red-600 ${deletingId === item.file_id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                    className={`absolute bottom-1.5 right-1.5 w-7 h-7 bg-red-500/80 rounded-full flex items-center justify-center transition-opacity hover:bg-red-600 ${deletingId === item.file_id ? 'opacity-100' : 'opacity-0 [@media(hover:hover)]:group-hover:opacity-100'
                                                         }`}
                                                     disabled={!!deletingId}
                                                 >
@@ -616,7 +712,10 @@ const GalleryPage = ({ user }) => {
                                     <div className="flex items-center space-x-3">
                                         <FiLoader className="animate-spin text-primary-500 text-xl shrink-0" />
                                         <span className="text-sm text-gray-700 font-medium">
-                                            Uploading {uploadProgress.done + 1}/{uploadProgress.total}
+                                            Uploading {uploadProgress.done}/{uploadProgress.total}
+                                            {uploadProgress.percent > 0 && uploadProgress.percent < 100
+                                                ? ` — ${uploadProgress.percent}%`
+                                                : ''}
                                         </span>
                                     </div>
                                     {uploadProgress.current && (
@@ -660,8 +759,31 @@ const GalleryPage = ({ user }) => {
                                 alt={lightboxItem.original_name}
                                 className="max-w-full max-h-[85vh] object-contain rounded-lg"
                             />
-                        ) : (
-                            videoStreamUrl ? (
+                        ) : (() => {
+                            const ext = (lightboxItem.original_name || '').split('.').pop().toLowerCase();
+                            const playable = ['mp4', 'webm', 'ogv', 'ogg'].includes(ext);
+                            if (!playable) {
+                                return (
+                                    <div className="flex flex-col items-center justify-center space-y-4 w-72 text-center">
+                                        <FiVideo className="text-white/40 text-6xl" />
+                                        <p className="text-white/70 text-sm">
+                                            .{ext} 형식은 브라우저에서 바로 재생되지 않아요.
+                                        </p>
+                                        {lightboxItem.drive_file_id && (
+                                            <a
+                                                href={`https://drive.google.com/file/d/${lightboxItem.drive_file_id}/view`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center space-x-2 px-5 py-2.5 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors"
+                                            >
+                                                <FiDownload />
+                                                <span>Google Drive에서 열기</span>
+                                            </a>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            return videoStreamUrl ? (
                                 <video
                                     key={videoStreamUrl}
                                     src={videoStreamUrl}
@@ -675,8 +797,8 @@ const GalleryPage = ({ user }) => {
                                 <div className="flex items-center justify-center w-64 h-36">
                                     <FiLoader className="animate-spin text-white text-4xl" />
                                 </div>
-                            )
-                        )}
+                            );
+                        })()}
                         <div className="text-center mt-3 text-white/60 text-sm">
                             {lightboxItem.original_name} • {formatDateLabel(lightboxItem.date_label)}
                             {lightboxItem.uploader_name && ` • by ${lightboxItem.uploader_name}`}

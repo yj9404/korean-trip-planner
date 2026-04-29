@@ -248,3 +248,82 @@ async def upload_to_drive_direct(
         "drive_status": "done",
         "created_at": datetime.utcnow().isoformat(),
     }
+
+
+async def create_drive_upload_session(
+    original_filename: str,
+    file_size: int,
+    group_id: str,
+    date_label: str,
+    folder_id: str,
+) -> str:
+    """Create a Google Drive resumable upload session URI for direct client-side upload.
+
+    The returned URI can be used by the browser to PUT the file directly to Drive,
+    bypassing Cloud Run's request body / timeout limits for large videos.
+    """
+    import asyncio
+    import httpx
+
+    if not _is_allowed(original_filename):
+        raise ValueError(f"File type not allowed: {original_filename}")
+    if file_size > MAX_FILE_SIZE:
+        raise ValueError("File too large (max 100MB)")
+
+    service = await asyncio.to_thread(_get_drive_service)
+    target_folder_id = folder_id
+    if group_id:
+        target_folder_id = await asyncio.to_thread(
+            _get_or_create_drive_folder, service, target_folder_id, group_id
+        )
+    if date_label:
+        target_folder_id = await asyncio.to_thread(
+            _get_or_create_drive_folder, service, target_folder_id, date_label
+        )
+
+    access_token = await asyncio.to_thread(get_drive_access_token)
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            "https://www.googleapis.com/upload/drive/v3/files",
+            params={"uploadType": "resumable", "supportsAllDrives": "true"},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "X-Upload-Content-Type": "application/octet-stream",
+                "X-Upload-Content-Length": str(file_size),
+            },
+            json={"name": original_filename, "parents": [target_folder_id]},
+        )
+
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"Drive resumable session creation failed: {resp.status_code} {resp.text[:300]}"
+        )
+
+    session_uri = resp.headers.get("location")
+    if not session_uri:
+        raise RuntimeError("Drive did not return a session URI (Location header missing)")
+
+    logger.info(f"Created Drive upload session: {original_filename} ({file_size} bytes)")
+    return session_uri
+
+
+async def set_drive_file_public(drive_file_id: str) -> str:
+    """Set 'anyone can read' permission on a Drive file. Returns the thumbnail URL."""
+    import asyncio
+
+    service = await asyncio.to_thread(_get_drive_service)
+    try:
+        await asyncio.to_thread(
+            lambda: service.permissions().create(
+                fileId=drive_file_id,
+                body={"type": "anyone", "role": "reader"},
+                supportsAllDrives=True,
+            ).execute()
+        )
+        logger.info(f"Set public permission on Drive file {drive_file_id}")
+    except Exception as e:
+        logger.warning(f"Could not set public permission on {drive_file_id}: {e}")
+
+    return _build_thumbnail_url(drive_file_id)

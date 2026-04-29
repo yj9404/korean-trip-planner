@@ -9,7 +9,10 @@ from fastapi.responses import StreamingResponse
 
 from app.services.firebase_service import firebase_service
 from app.dependencies import get_current_user, get_current_group
-from app.services.storage_service import upload_to_drive_direct, ALLOWED_EXTENSIONS, get_drive_access_token
+from app.services.storage_service import (
+    upload_to_drive_direct, ALLOWED_EXTENSIONS, get_drive_access_token,
+    create_drive_upload_session, set_drive_file_public, _get_media_type,
+)
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -100,6 +103,93 @@ async def upload_media(
         "errors": errors,
         "total": len(results),
     }
+
+
+@router.post("/create-upload-session")
+async def create_upload_session(
+    filename: str = Form(...),
+    date_label: str = Form(...),
+    file_size: int = Form(...),
+    current_user: dict = Depends(get_current_user),
+    current_group_id: str = Depends(get_current_group),
+):
+    """Create a Google Drive resumable upload session URI.
+    The client uploads the file directly to Drive using the returned URI,
+    bypassing Cloud Run's body size / timeout limits for large videos.
+    """
+    if not settings.google_drive_folder_id:
+        raise HTTPException(500, "Google Drive folder not configured")
+
+    try:
+        session_uri = await create_drive_upload_session(
+            original_filename=filename,
+            file_size=file_size,
+            group_id=current_group_id,
+            date_label=date_label,
+            folder_id=settings.google_drive_folder_id,
+        )
+        return {"session_uri": session_uri}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"create_upload_session error for {filename}: {e}")
+        raise HTTPException(500, "Failed to create Drive upload session")
+
+
+@router.post("/finalize-upload")
+async def finalize_upload(
+    drive_file_id: str = Form(...),
+    original_name: str = Form(...),
+    date_label: str = Form(...),
+    file_size: int = Form(...),
+    current_user: dict = Depends(get_current_user),
+    current_group_id: str = Depends(get_current_group),
+):
+    """Save Drive file metadata to Firestore after a direct client upload completes."""
+    import uuid
+    from pathlib import Path
+
+    group_id = current_group_id
+    db = firebase_service.db
+    media_col = db.collection("groups").document(group_id).collection("media")
+
+    existing = list(media_col.where("drive_file_id", "==", drive_file_id).limit(1).stream())
+    if existing:
+        existing_data = existing[0].to_dict()
+        return {"status": "duplicate", "file_id": existing_data.get("file_id", existing[0].id)}
+
+    try:
+        thumbnail_url = await set_drive_file_public(drive_file_id)
+        ext = Path(original_name).suffix.lower()
+        file_id = uuid.uuid4().hex[:12]
+
+        meta = {
+            "file_id": file_id,
+            "filename": f"{file_id}{ext}",
+            "original_name": original_name,
+            "media_type": _get_media_type(original_name),
+            "size": file_size,
+            "date_label": date_label,
+            "group_id": group_id,
+            "drive_file_id": drive_file_id,
+            "image_url": thumbnail_url,
+            "drive_status": "done",
+            "created_at": datetime.utcnow().isoformat(),
+            "uploader_id": current_user["uid"],
+            "uploader_name": current_user.get("name", "Unknown"),
+        }
+        media_col.document(file_id).set(meta)
+        logger.info(f"Finalized direct upload: {original_name} -> drive:{drive_file_id}")
+
+        return {
+            "status": "ok",
+            "file_id": file_id,
+            "image_url": thumbnail_url,
+            "media_type": meta["media_type"],
+        }
+    except Exception as e:
+        logger.error(f"finalize_upload error for drive:{drive_file_id}: {e}")
+        raise HTTPException(500, "Failed to save upload metadata")
 
 
 @router.get("/list")
@@ -222,25 +312,36 @@ async def stream_video(
     if range_header:
         proxy_headers["Range"] = range_header
 
+    logger.info(
+        f"Stream request: file_id={file_id} drive_file_id={drive_file_id} "
+        f"ext={ext} range={range_header!r}"
+    )
+
     # Open the Drive stream and keep it alive for the generator
     client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(10.0, read=None))
     drive_req = client.build_request("GET", drive_url, headers=proxy_headers)
     drive_resp = await client.send(drive_req, stream=True)
 
+    logger.info(
+        f"Drive response: status={drive_resp.status_code} "
+        f"content-type={drive_resp.headers.get('content-type')} "
+        f"content-length={drive_resp.headers.get('content-length')}"
+    )
+
     if drive_resp.status_code not in (200, 206):
         await drive_resp.aclose()
         await client.aclose()
+        logger.error(f"Drive stream error: {drive_resp.status_code} for {drive_file_id}")
         raise HTTPException(502, f"Drive returned {drive_resp.status_code}")
 
-    # Build response headers
+    # Build response headers — Content-Type is passed via media_type param, not here
     resp_headers = {
-        "Content-Type": content_type,
         "Accept-Ranges": "bytes",
         "Cache-Control": "no-cache",
     }
     for h in ("content-length", "content-range"):
         if h in drive_resp.headers:
-            resp_headers[h.replace("-", "-")] = drive_resp.headers[h]
+            resp_headers[h] = drive_resp.headers[h]
 
     async def generate():
         try:
