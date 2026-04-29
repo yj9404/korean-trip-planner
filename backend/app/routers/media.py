@@ -4,13 +4,12 @@ import logging
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 
 from app.services.firebase_service import firebase_service
 from app.dependencies import get_current_user, get_current_group
 from app.services.storage_service import (
-    upload_to_drive_direct, ALLOWED_EXTENSIONS, get_drive_access_token,
+    upload_to_drive_direct, ALLOWED_EXTENSIONS,
     create_drive_upload_session, set_drive_file_public, _get_media_type,
 )
 from app.config import settings
@@ -235,131 +234,6 @@ async def list_dates(
 
     dates = sorted(set(doc.to_dict().get("date_label", "") for doc in docs))
     return dates
-
-
-@router.get("/{file_id}/stream")
-async def stream_video(
-    file_id: str,
-    request: Request,
-    token: str,  # Firebase ID token via query param (video element cannot send headers)
-):
-    """Stream a video file from Google Drive with HTTP Range request support.
-
-    The `token` query param is used because the browser's <video> element
-    cannot attach custom Authorization headers.
-    """
-    import httpx
-    from firebase_admin import auth as firebase_auth
-
-    # --- Auth: verify Firebase token from query param ---
-    try:
-        decoded = firebase_auth.verify_id_token(token, check_revoked=False, clock_skew_seconds=60)
-    except Exception as e:
-        raise HTTPException(401, f"Invalid token: {e}")
-
-    user_id = decoded["uid"]
-
-    # Resolve group
-    preferences = await firebase_service.get_user_preferences(user_id)
-    group_id = preferences.get("current_group_id")
-    if not group_id or not await firebase_service.check_user_group_access(user_id, group_id):
-        groups = await firebase_service.get_user_groups(user_id)
-        if groups:
-            group_id = groups[0]["id"]
-        else:
-            raise HTTPException(403, "No group access")
-
-    # --- Fetch media doc ---
-    db = firebase_service.db
-    doc = db.collection("groups").document(group_id).collection("media").document(file_id).get()
-    if not doc.exists:
-        raise HTTPException(404, "File not found")
-
-    data = doc.to_dict()
-    if data.get("media_type") != "video":
-        raise HTTPException(400, "Not a video file")
-
-    drive_file_id = data.get("drive_file_id")
-    if not drive_file_id:
-        raise HTTPException(404, "Drive file ID not found")
-
-    # --- Get fresh Drive access token ---
-    try:
-        access_token = get_drive_access_token()
-    except Exception as e:
-        logger.error(f"Failed to get Drive access token: {e}")
-        raise HTTPException(500, "Failed to authenticate with Drive")
-
-    # --- Determine content type ---
-    original_name = data.get("original_name", "video.mp4")
-    ext = original_name.rsplit(".", 1)[-1].lower() if "." in original_name else "mp4"
-    content_type = {
-        "mp4": "video/mp4",
-        "mov": "video/quicktime",
-        "avi": "video/x-msvideo",
-        "webm": "video/webm",
-        "mkv": "video/x-matroska",
-    }.get(ext, "video/mp4")
-
-    drive_url = (
-        f"https://www.googleapis.com/drive/v3/files/{drive_file_id}"
-        f"?alt=media&supportsAllDrives=true"
-    )
-
-    # --- Forward Range header if present (enables seeking) ---
-    proxy_headers = {"Authorization": f"Bearer {access_token}"}
-    range_header = request.headers.get("range")
-    if range_header:
-        proxy_headers["Range"] = range_header
-
-    logger.info(
-        f"Stream request: file_id={file_id} drive_file_id={drive_file_id} "
-        f"ext={ext} range={range_header!r}"
-    )
-
-    # Open the Drive stream and keep it alive for the generator
-    client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(10.0, read=None))
-    drive_req = client.build_request("GET", drive_url, headers=proxy_headers)
-    drive_resp = await client.send(drive_req, stream=True)
-
-    logger.info(
-        f"Drive response: status={drive_resp.status_code} "
-        f"content-type={drive_resp.headers.get('content-type')} "
-        f"content-length={drive_resp.headers.get('content-length')}"
-    )
-
-    if drive_resp.status_code not in (200, 206):
-        await drive_resp.aclose()
-        await client.aclose()
-        logger.error(f"Drive stream error: {drive_resp.status_code} for {drive_file_id}")
-        raise HTTPException(502, f"Drive returned {drive_resp.status_code}")
-
-    # Build response headers — Content-Type is passed via media_type param, not here
-    resp_headers = {
-        "Accept-Ranges": "bytes",
-        "Cache-Control": "no-cache",
-        "Content-Disposition": f'inline; filename="{original_name}"',
-        # Allow browser to read Content-Length/Content-Range for range requests
-        "Access-Control-Expose-Headers": "Content-Length, Content-Range",
-    }
-    for h in ("content-length", "content-range"):
-        if h in drive_resp.headers:
-            resp_headers[h] = drive_resp.headers[h]
-
-    async def generate():
-        try:
-            async for chunk in drive_resp.aiter_bytes(65536):
-                yield chunk
-        finally:
-            await drive_resp.aclose()
-            await client.aclose()
-
-    return StreamingResponse(
-        generate(),
-        status_code=drive_resp.status_code,
-        headers=resp_headers,
-        media_type=content_type,
-    )
 
 
 @router.delete("/{file_id}")

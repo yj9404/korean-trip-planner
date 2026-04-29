@@ -24,7 +24,6 @@ const GalleryPage = ({ user }) => {
     const [uploadDate, setUploadDate] = useState(new Date().toISOString().split('T')[0]);
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [lightboxItem, setLightboxItem] = useState(null);
-    const [videoStreamUrl, setVideoStreamUrl] = useState(null);
     const [error, setError] = useState('');
     const [duplicates, setDuplicates] = useState([]);
     const [selectMode, setSelectMode] = useState(false);
@@ -513,18 +512,6 @@ const GalleryPage = ({ user }) => {
         };
     }, [selectedFiles]);
 
-    // Generate streaming URL when a video lightbox opens
-    useEffect(() => {
-        if (lightboxItem?.media_type === 'video' && lightboxItem.drive_file_id) {
-            setVideoStreamUrl(null);
-            auth.currentUser?.getIdToken().then(token => {
-                setVideoStreamUrl(`${API}/api/v1/media/${lightboxItem.file_id}/stream?token=${token}`);
-            });
-        } else {
-            setVideoStreamUrl(null);
-        }
-    }, [lightboxItem]);
-
     // Group media by date for "all" view
     const groupedMedia = selectedDate ? { [selectedDate]: media } : media.reduce((acc, item) => {
         const d = item.date_label || 'Unknown';
@@ -883,46 +870,23 @@ const GalleryPage = ({ user }) => {
                                 alt={lightboxItem.original_name}
                                 className="max-w-full max-h-[85vh] object-contain rounded-lg"
                             />
-                        ) : (() => {
-                            const ext = (lightboxItem.original_name || '').split('.').pop().toLowerCase();
-                            const playable = ['mp4', 'webm', 'ogv', 'ogg', 'mov'].includes(ext);
-                            if (!playable) {
-                                return (
-                                    <div className="flex flex-col items-center justify-center space-y-4 w-72 text-center">
-                                        <FiVideo className="text-white/40 text-6xl" />
-                                        <p className="text-white/70 text-sm">
-                                            .{ext} 형식은 브라우저에서 바로 재생되지 않아요.
-                                        </p>
-                                        {lightboxItem.drive_file_id && (
-                                            <a
-                                                href={`https://drive.google.com/file/d/${lightboxItem.drive_file_id}/view`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex items-center space-x-2 px-5 py-2.5 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors"
-                                            >
-                                                <FiDownload />
-                                                <span>Google Drive에서 열기</span>
-                                            </a>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            return videoStreamUrl ? (
-                                <video
-                                    key={videoStreamUrl}
-                                    src={videoStreamUrl}
-                                    controls
-                                    autoPlay
-                                    playsInline
-                                    className="w-[80vw] max-w-[900px] rounded-lg"
-                                    style={{ maxHeight: '85vh' }}
+                        ) : lightboxItem.drive_file_id ? (
+                            <div className="w-[80vw] max-w-[900px] aspect-video rounded-lg overflow-hidden">
+                                <iframe
+                                    src={`https://drive.google.com/file/d/${lightboxItem.drive_file_id}/preview`}
+                                    width="100%"
+                                    height="100%"
+                                    style={{ border: 'none' }}
+                                    allow="autoplay; fullscreen"
+                                    allowFullScreen
                                 />
-                            ) : (
-                                <div className="flex items-center justify-center w-64 h-36">
-                                    <FiLoader className="animate-spin text-white text-4xl" />
-                                </div>
-                            );
-                        })()}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center space-y-4 w-72 text-center">
+                                <FiVideo className="text-white/40 text-6xl" />
+                                <p className="text-white/70 text-sm">영상을 불러올 수 없어요.</p>
+                            </div>
+                        )}
                         <div className="text-center mt-3 text-white/60 text-sm">
                             {lightboxItem.original_name} • {formatDateLabel(lightboxItem.date_label)}
                             {lightboxItem.uploader_name && ` • by ${lightboxItem.uploader_name}`}
