@@ -338,6 +338,9 @@ async def stream_video(
     resp_headers = {
         "Accept-Ranges": "bytes",
         "Cache-Control": "no-cache",
+        "Content-Disposition": f'inline; filename="{original_name}"',
+        # Allow browser to read Content-Length/Content-Range for range requests
+        "Access-Control-Expose-Headers": "Content-Length, Content-Range",
     }
     for h in ("content-length", "content-range"):
         if h in drive_resp.headers:

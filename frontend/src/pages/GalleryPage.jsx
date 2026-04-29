@@ -885,7 +885,7 @@ const GalleryPage = ({ user }) => {
                             />
                         ) : (() => {
                             const ext = (lightboxItem.original_name || '').split('.').pop().toLowerCase();
-                            const playable = ['mp4', 'webm', 'ogv', 'ogg'].includes(ext);
+                            const playable = ['mp4', 'webm', 'ogv', 'ogg', 'mov'].includes(ext);
                             if (!playable) {
                                 return (
                                     <div className="flex flex-col items-center justify-center space-y-4 w-72 text-center">
