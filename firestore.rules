@@ -56,6 +56,18 @@ service cloud.firestore {
       }
     }
 
+    // Media Likes: any authenticated user can read likes (for counts).
+    // Users can only create/delete their own like document.
+    match /media_likes/{mediaId} {
+      allow read: if request.auth != null;
+
+      match /users/{userId} {
+        allow read: if request.auth != null;
+        // Only the owner of the like can write (create or delete) it
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;

@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
+import {
+    collection, doc, getCountFromServer, getDoc, setDoc, deleteDoc, onSnapshot
+} from 'firebase/firestore';
 import {
     FiUpload, FiImage, FiVideo, FiTrash2, FiCalendar,
-    FiX, FiCheck, FiLoader, FiPlus, FiDownload, FiPlay
+    FiX, FiCheck, FiLoader, FiPlus, FiDownload, FiPlay, FiHeart
 } from 'react-icons/fi';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -33,9 +36,13 @@ const GalleryPage = ({ user }) => {
     const [processMsg, setProcessMsg] = useState('');          // message shown in overlay
     // Toast notification
     const [toast, setToast] = useState('');                    // '' = hidden
+    // Likes: { [fileId]: { count: number, liked: boolean } }
+    const [likes, setLikes] = useState({});
     const fileInputRef = useRef(null);
     const longPressTimer = useRef(null);
     const longPressActive = useRef(false);
+    // Keep an unsubscribe reference for the active lightbox listener
+    const likesUnsubRef = useRef(null);
 
     const showToast = (msg) => {
         setToast(msg);
@@ -84,6 +91,84 @@ const GalleryPage = ({ user }) => {
         loadDates();
         loadMedia();
     }, [loadDates, loadMedia]);
+
+    // ── Likes helpers ──────────────────────────────────────────
+
+    // Subscribe to real-time like count + own like status for a single item.
+    // Returns an unsubscribe function.
+    const subscribeLikes = useCallback((fileId) => {
+        const uid = auth.currentUser?.uid;
+        const usersCol = collection(db, 'media_likes', fileId, 'users');
+        // Listen on the subcollection; derive count and own-like from snapshot
+        const unsub = onSnapshot(usersCol, (snap) => {
+            const count = snap.size;
+            const liked = snap.docs.some(d => d.id === uid);
+            setLikes(prev => ({ ...prev, [fileId]: { count, liked } }));
+        });
+        return unsub;
+    }, []);
+
+    // Fetch like count once (no real-time) — used when rendering the grid
+    const fetchLikeCount = useCallback(async (fileId) => {
+        try {
+            const usersCol = collection(db, 'media_likes', fileId, 'users');
+            const snapshot = await getCountFromServer(usersCol);
+            const count = snapshot.data().count;
+            setLikes(prev => ({
+                ...prev,
+                [fileId]: { count, liked: prev[fileId]?.liked ?? false }
+            }));
+        } catch (e) {
+            // Silently ignore — likes are non-critical
+        }
+    }, []);
+
+    // Toggle like for the currently open lightbox item
+    const handleToggleLike = useCallback(async (fileId) => {
+        const uid = auth.currentUser?.uid;
+        if (!uid || !fileId) return;
+        const likeRef = doc(db, 'media_likes', fileId, 'users', uid);
+        const current = likes[fileId];
+        try {
+            if (current?.liked) {
+                await deleteDoc(likeRef);
+            } else {
+                await setDoc(likeRef, { likedAt: new Date().toISOString() });
+            }
+            // onSnapshot in subscribeLikes will update state automatically
+        } catch (e) {
+            console.error('Like toggle failed:', e);
+        }
+    }, [likes]);
+
+    // Fetch counts for all visible media items (grid view, one-shot)
+    useEffect(() => {
+        if (!media.length) return;
+        media.forEach(item => {
+            // Only fetch if we don't have data yet
+            if (likes[item.file_id] === undefined) {
+                fetchLikeCount(item.file_id);
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [media]);
+
+    // Subscribe to real-time updates when a lightbox item is open
+    useEffect(() => {
+        if (likesUnsubRef.current) {
+            likesUnsubRef.current();
+            likesUnsubRef.current = null;
+        }
+        if (lightboxItem) {
+            likesUnsubRef.current = subscribeLikes(lightboxItem.file_id);
+        }
+        return () => {
+            if (likesUnsubRef.current) {
+                likesUnsubRef.current();
+                likesUnsubRef.current = null;
+            }
+        };
+    }, [lightboxItem, subscribeLikes]);
 
     // Filter by date
     const handleDateFilter = (date) => {
@@ -602,6 +687,16 @@ const GalleryPage = ({ user }) => {
                                                 </div>
                                             )}
 
+                                            {/* Heart badge (grid, read-only) */}
+                                            {!selectMode && (likes[item.file_id]?.count ?? 0) > 0 && (
+                                                <div className="absolute top-1.5 left-1.5 flex items-center space-x-0.5 bg-black/50 rounded-full px-1.5 py-0.5">
+                                                    <FiHeart className="text-rose-400 text-xs fill-rose-400" />
+                                                    <span className="text-white text-xs font-medium leading-none">
+                                                        {likes[item.file_id].count}
+                                                    </span>
+                                                </div>
+                                            )}
+
                                             {/* Drive uploading indicator (normal mode only) */}
                                             {!selectMode && item.drive_status === 'uploading' && (
                                                 <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
@@ -802,6 +897,29 @@ const GalleryPage = ({ user }) => {
                         <div className="text-center mt-3 text-white/60 text-sm">
                             {lightboxItem.original_name} • {formatDateLabel(lightboxItem.date_label)}
                             {lightboxItem.uploader_name && ` • by ${lightboxItem.uploader_name}`}
+                        </div>
+
+                        {/* ── Heart button ── */}
+                        <div className="flex items-center justify-center mt-4 space-x-3">
+                            <button
+                                onClick={() => handleToggleLike(lightboxItem.file_id)}
+                                className={`flex items-center space-x-2 px-5 py-2.5 rounded-full font-semibold text-sm transition-all active:scale-95 ${
+                                    likes[lightboxItem.file_id]?.liked
+                                        ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40'
+                                        : 'bg-white/10 text-white hover:bg-white/20'
+                                }`}
+                            >
+                                <FiHeart
+                                    className={`text-base transition-transform ${
+                                        likes[lightboxItem.file_id]?.liked
+                                            ? 'fill-white scale-110'
+                                            : ''
+                                    }`}
+                                />
+                                <span>
+                                    {likes[lightboxItem.file_id]?.count ?? 0}
+                                </span>
+                            </button>
                         </div>
                     </div>
                 </div>
