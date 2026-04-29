@@ -21,6 +21,7 @@ const GalleryPage = ({ user }) => {
     const [uploadDate, setUploadDate] = useState(new Date().toISOString().split('T')[0]);
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [lightboxItem, setLightboxItem] = useState(null);
+    const [videoStreamUrl, setVideoStreamUrl] = useState(null);
     const [error, setError] = useState('');
     const [duplicates, setDuplicates] = useState([]);
     const [selectMode, setSelectMode] = useState(false);
@@ -304,6 +305,18 @@ const GalleryPage = ({ user }) => {
             selectedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
         };
     }, [selectedFiles]);
+
+    // Generate streaming URL when a video lightbox opens
+    useEffect(() => {
+        if (lightboxItem?.media_type === 'video' && lightboxItem.drive_file_id) {
+            setVideoStreamUrl(null);
+            auth.currentUser?.getIdToken().then(token => {
+                setVideoStreamUrl(`${API}/api/v1/media/${lightboxItem.file_id}/stream?token=${token}`);
+            });
+        } else {
+            setVideoStreamUrl(null);
+        }
+    }, [lightboxItem]);
 
     // Group media by date for "all" view
     const groupedMedia = selectedDate ? { [selectedDate]: media } : media.reduce((acc, item) => {
@@ -648,14 +661,21 @@ const GalleryPage = ({ user }) => {
                                 className="max-w-full max-h-[85vh] object-contain rounded-lg"
                             />
                         ) : (
-                            <iframe
-                                src={`https://drive.google.com/file/d/${lightboxItem.drive_file_id}/preview`}
-                                className="w-[80vw] max-w-[900px] rounded-lg"
-                                style={{ aspectRatio: '16/9' }}
-                                allow="autoplay"
-                                allowFullScreen
-                                title={lightboxItem.original_name}
-                            />
+                            videoStreamUrl ? (
+                                <video
+                                    key={videoStreamUrl}
+                                    src={videoStreamUrl}
+                                    controls
+                                    autoPlay
+                                    playsInline
+                                    className="w-[80vw] max-w-[900px] rounded-lg"
+                                    style={{ maxHeight: '85vh' }}
+                                />
+                            ) : (
+                                <div className="flex items-center justify-center w-64 h-36">
+                                    <FiLoader className="animate-spin text-white text-4xl" />
+                                </div>
+                            )
                         )}
                         <div className="text-center mt-3 text-white/60 text-sm">
                             {lightboxItem.original_name} • {formatDateLabel(lightboxItem.date_label)}

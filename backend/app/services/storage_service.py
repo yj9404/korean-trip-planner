@@ -46,6 +46,53 @@ def _build_thumbnail_url(drive_file_id: str, size: int = 1000) -> str:
     return f"https://drive.google.com/thumbnail?id={drive_file_id}&sz=w{size}"
 
 
+def get_drive_access_token() -> str:
+    """Return a fresh OAuth access token for Drive API calls.
+
+    Mirrors _get_drive_service() credential logic but only returns the token,
+    which can then be used directly in HTTP requests (e.g. streaming proxy).
+    """
+    import google.auth.transport.requests
+    from google.oauth2 import service_account
+    from google.oauth2.credentials import Credentials
+    from app.config import settings
+    import json, os
+
+    cred = None
+
+    # 1. OAuth 2.0 Refresh Token
+    if settings.google_refresh_token and settings.google_client_id and settings.google_client_secret:
+        try:
+            cred = Credentials(
+                token=None,
+                refresh_token=settings.google_refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=settings.google_client_id,
+                client_secret=settings.google_client_secret,
+            )
+        except Exception as e:
+            logger.error(f"OAuth credential build failed: {e}")
+
+    # 2. Service Account fallback
+    if cred is None:
+        svc_info = None
+        if settings.firebase_credentials_json:
+            svc_info = json.loads(settings.firebase_credentials_json)
+        elif settings.firebase_credentials_path and os.path.exists(settings.firebase_credentials_path):
+            with open(settings.firebase_credentials_path) as f:
+                svc_info = json.load(f)
+        if svc_info:
+            cred = service_account.Credentials.from_service_account_info(
+                svc_info,
+                scopes=["https://www.googleapis.com/auth/drive.file"],
+            )
+        else:
+            raise RuntimeError("No Drive credentials available")
+
+    cred.refresh(google.auth.transport.requests.Request())
+    return cred.token
+
+
 def _get_drive_service():
     """Build and return an authenticated Google Drive API service.
 
