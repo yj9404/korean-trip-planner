@@ -455,7 +455,8 @@ const GalleryPage = ({ user }) => {
     }, [selectedFiles]);
 
     // Group media by date for "all" view
-    const groupedMedia = selectedDate ? { [selectedDate]: media } : media.reduce((acc, item) => {
+    const displayedMedia = selectedDate ? media.filter(m => m.date_label === selectedDate) : media;
+    const groupedMedia = selectedDate ? { [selectedDate]: displayedMedia } : displayedMedia.reduce((acc, item) => {
         const d = item.date_label || 'Unknown';
         if (!acc[d]) acc[d] = [];
         acc[d].push(item);

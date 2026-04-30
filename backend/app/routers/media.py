@@ -206,14 +206,13 @@ async def list_media(
 
     if date_label:
         query = query.where("date_label", "==", date_label)
-
-    query = query.order_by("created_at", direction=fs.Query.DESCENDING)
-
-    docs = query.stream()
-    items = []
-    for doc in docs:
-        data = doc.to_dict()
-        items.append(data)
+        docs = query.stream()
+        items = [doc.to_dict() for doc in docs]
+        items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    else:
+        query = query.order_by("created_at", direction=fs.Query.DESCENDING)
+        docs = query.stream()
+        items = [doc.to_dict() for doc in docs]
 
     return items
 
