@@ -373,43 +373,47 @@ const GalleryPage = ({ user }) => {
     };
 
     // Download selected — Web Share API (mobile) with JSZip fallback (desktop)
+    // All downloads go through the backend proxy to avoid CORS / SSL issues with Drive URLs.
     const handleDownloadSelected = async () => {
         if (!selectedIds.size) return;
 
-        // Collect image_url from currently visible media list
+        // Include both images and videos
         const targets = media
-            .filter(m => selectedIds.has(m.file_id) && m.media_type === 'image' && m.image_url)
+            .filter(m => selectedIds.has(m.file_id) && (m.media_type === 'image' || m.media_type === 'video'))
             .slice(0, 30);
 
         if (!targets.length) {
-            showToast('No downloadable images found');
+            showToast('No downloadable files found');
             return;
         }
 
         setProcessing(true);
-        setProcessMsg('Fetching images...');
+        setProcessMsg('Fetching files...');
 
         try {
-            // Step 1: Fetch all blobs in parallel
+            const token = await auth.currentUser?.getIdToken();
+
+            // Fetch all blobs via backend proxy in parallel
             const blobs = await Promise.all(
                 targets.map(async (item) => {
-                    const res = await fetch(item.image_url);
+                    const res = await fetch(`${API}/api/v1/media/download/${item.file_id}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
                     if (!res.ok) throw new Error(`Failed to fetch ${item.original_name}`);
                     const blob = await res.blob();
-                    const ext = item.original_name.split('.').pop() || 'jpg';
-                    const filename = item.original_name || `photo_${item.file_id}.${ext}`;
+                    const filename = item.original_name || `file_${item.file_id}`;
                     return new File([blob], filename, { type: blob.type });
                 })
             );
 
-            // Step 2: Web Share API (iOS / Android native share sheet)
+            // Web Share API (iOS / Android native share sheet)
             if (navigator.canShare && navigator.canShare({ files: blobs })) {
                 await navigator.share({
                     files: blobs,
                     title: '여행 사진',
                 });
             } else {
-                // Step 3: JSZip fallback (desktop / unsupported browser)
+                // JSZip fallback (desktop / unsupported browser)
                 setProcessMsg('Compressing to ZIP...');
                 const zip = new JSZip();
                 blobs.forEach(file => zip.file(file.name, file));

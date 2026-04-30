@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.services.firebase_service import firebase_service
 from app.dependencies import get_current_user, get_current_group
@@ -278,3 +279,59 @@ async def delete_media(
             logger.warning(f"Could not delete Drive file {drive_file_id}: {e}")
 
     return {"status": "deleted", "file_id": file_id}
+
+
+@router.get("/download/{file_id}")
+async def download_media(
+    file_id: str,
+    current_user: dict = Depends(get_current_user),
+    current_group_id: str = Depends(get_current_group),
+):
+    """Proxy-download a Drive file through the backend to avoid CORS/SSL issues on the client."""
+    import io
+    from app.services.storage_service import _get_drive_service
+
+    group_id = current_group_id
+    db = firebase_service.db
+
+    doc = db.collection("groups").document(group_id)\
+             .collection("media").document(file_id).get()
+
+    if not doc.exists:
+        raise HTTPException(404, "File not found")
+
+    data = doc.to_dict()
+    drive_file_id = data.get("drive_file_id")
+    if not drive_file_id:
+        raise HTTPException(404, "Drive file ID not found")
+
+    original_name = data.get("original_name", f"{file_id}")
+    media_type = data.get("media_type", "image")
+
+    try:
+        service = _get_drive_service()
+        request = service.files().get_media(fileId=drive_file_id, supportsAllDrives=True)
+
+        buf = io.BytesIO()
+        from googleapiclient.http import MediaIoBaseDownload
+        downloader = MediaIoBaseDownload(buf, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+        buf.seek(0)
+
+        # Guess MIME type from extension
+        import mimetypes
+        mime, _ = mimetypes.guess_type(original_name)
+        if not mime:
+            mime = "video/mp4" if media_type == "video" else "image/jpeg"
+
+        content_disposition = f'attachment; filename="{original_name}"'
+        return StreamingResponse(
+            buf,
+            media_type=mime,
+            headers={"Content-Disposition": content_disposition},
+        )
+    except Exception as e:
+        logger.error(f"Download proxy error for {file_id}: {e}")
+        raise HTTPException(500, "Failed to download file from Drive")
