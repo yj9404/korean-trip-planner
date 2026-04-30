@@ -210,10 +210,19 @@ const GalleryPage = ({ user }) => {
     };
 
     // File selection
+    const VIDEO_MAX_BYTES = 30 * 1024 * 1024; // 30MB (Cloud Run body limit is 32MB)
+
     const handleFileSelect = (e) => {
         const files = Array.from(e.target.files);
         if (files.length > 30) {
             setError('Maximum 30 files at once');
+            return;
+        }
+
+        // Reject videos over 30MB (Cloud Run request body cap)
+        const oversized = files.filter(f => f.type.startsWith('video/') && f.size > VIDEO_MAX_BYTES);
+        if (oversized.length > 0) {
+            setError(`Video file(s) too large (max 30MB): ${oversized.map(f => f.name).join(', ')}`);
             return;
         }
 
@@ -228,62 +237,8 @@ const GalleryPage = ({ user }) => {
         setError('');
     };
 
-    // Direct-to-Drive upload for videos: creates a resumable session on backend,
-    // then PUTs the file straight to Google Drive (bypasses Cloud Run size/timeout limits)
-    const uploadVideoViaDrive = (file, token, onProgress) => new Promise(async (resolve, reject) => {
-        try {
-            const sessionForm = new FormData();
-            sessionForm.append('filename', file.name);
-            sessionForm.append('date_label', uploadDate);
-            sessionForm.append('file_size', file.size);
 
-            const sessionRes = await fetch(`${API}/api/v1/media/create-upload-session`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-                body: sessionForm,
-            });
-            if (!sessionRes.ok) throw new Error('Session creation failed');
-            const { session_uri } = await sessionRes.json();
-
-            // Upload directly to Google Drive via XHR to track per-byte progress
-            const driveFileId = await new Promise((res2, rej2) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('PUT', session_uri);
-                xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-                xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-                };
-                xhr.onload = () => {
-                    if (xhr.status === 200 || xhr.status === 201) {
-                        try { res2(JSON.parse(xhr.responseText).id); }
-                        catch { rej2(new Error('Invalid Drive response')); }
-                    } else {
-                        rej2(new Error(`Drive upload failed: ${xhr.status}`));
-                    }
-                };
-                xhr.onerror = () => rej2(new Error('Network error during Drive upload'));
-                xhr.send(file);
-            });
-
-            const finalForm = new FormData();
-            finalForm.append('drive_file_id', driveFileId);
-            finalForm.append('original_name', file.name);
-            finalForm.append('date_label', uploadDate);
-            finalForm.append('file_size', file.size);
-
-            const finalRes = await fetch(`${API}/api/v1/media/finalize-upload`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-                body: finalForm,
-            });
-            if (!finalRes.ok) throw new Error('Finalize failed');
-            resolve(await finalRes.json());
-        } catch (e) {
-            reject(e);
-        }
-    });
-
-    // Upload — videos go directly to Drive; images go through Cloud Run
+    // Upload — all files (images and videos) go through the backend /upload endpoint
     const handleUpload = async () => {
         if (!selectedFiles.length) return;
 
@@ -300,37 +255,24 @@ const GalleryPage = ({ user }) => {
             const { file } = selectedFiles[i];
             setUploadProgress({ done: i + 1, total: selectedFiles.length, current: file.name, percent: 0 });
 
-            const isVideo = file.type.startsWith('video/');
-
             try {
-                if (isVideo) {
-                    const result = await uploadVideoViaDrive(file, token, (percent) => {
-                        setUploadProgress(prev => ({ ...prev, percent }));
-                    });
-                    if (result.status === 'duplicate') {
-                        allDuplicates.push({ file: file.name, existing_date: '' });
-                    } else {
-                        successCount++;
-                    }
+                const formData = new FormData();
+                formData.append('date_label', uploadDate);
+                formData.append('files', file);
+
+                const res = await fetch(`${API}/api/v1/media/upload`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                });
+
+                if (res.ok) {
+                    const result = await res.json();
+                    successCount += result.total;
+                    if (result.duplicates?.length) allDuplicates.push(...result.duplicates);
+                    if (result.errors?.length) allErrors.push(...result.errors);
                 } else {
-                    const formData = new FormData();
-                    formData.append('date_label', uploadDate);
-                    formData.append('files', file);
-
-                    const res = await fetch(`${API}/api/v1/media/upload`, {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${token}` },
-                        body: formData,
-                    });
-
-                    if (res.ok) {
-                        const result = await res.json();
-                        successCount += result.total;
-                        if (result.duplicates?.length) allDuplicates.push(...result.duplicates);
-                        if (result.errors?.length) allErrors.push(...result.errors);
-                    } else {
-                        allErrors.push({ file: file.name, error: 'Upload failed' });
-                    }
+                    allErrors.push({ file: file.name, error: 'Upload failed' });
                 }
             } catch (e) {
                 allErrors.push({ file: file.name, error: e.message || 'Upload failed' });
