@@ -45,6 +45,24 @@ const GalleryPage = ({ user }) => {
     // Tracks whether we pushed a history entry for the current lightbox
     const lightboxHistoryRef = useRef(false);
 
+    const [preferredLang, setPreferredLang] = useState('en');
+
+    useEffect(() => {
+        const fetchPreferences = async () => {
+            if (user?.uid) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists()) {
+                        setPreferredLang(userDoc.data().preferred_lang || 'en');
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch preferences', e);
+                }
+            }
+        };
+        fetchPreferences();
+    }, [user]);
+
     const showToast = (msg) => {
         setToast(msg);
         setTimeout(() => setToast(''), 3000);
@@ -389,10 +407,12 @@ const GalleryPage = ({ user }) => {
         }
 
         setProcessing(true);
-        setProcessMsg('Fetching files...');
+        setProcessMsg(`Fetching files... (0/${targets.length})`);
 
         try {
             const token = await auth.currentUser?.getIdToken();
+            const total = targets.length;
+            let doneCount = 0;
 
             // Fetch all blobs via backend proxy
             const blobs = await Promise.all(
@@ -403,6 +423,10 @@ const GalleryPage = ({ user }) => {
                     if (!res.ok) throw new Error(`Failed to fetch ${item.original_name}`);
                     const blob = await res.blob();
                     const filename = item.original_name || `file_${item.file_id}`;
+                    
+                    doneCount++;
+                    setProcessMsg(`Fetching files... (${doneCount}/${total})`);
+                    
                     return { blob, filename };
                 })
             );
@@ -541,6 +565,16 @@ const GalleryPage = ({ user }) => {
                         <p className="text-xs text-gray-400 mt-1 mr-1 text-right">Max 30 files per upload</p>
                     )}
                 </div>
+            </div>
+
+            {/* Notice */}
+            <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl mb-6 text-sm flex items-start space-x-2">
+                <span className="text-lg">💡</span>
+                <span>
+                    {preferredLang === 'ko' 
+                        ? '동영상은 최대 30MB까지 업로드 가능하며, 구글 드라이브 업로드 후 동영상 처리에 시간이 소요될 수 있습니다.'
+                        : 'Videos up to 30MB are supported. Please note that Google Drive processing takes time after upload.'}
+                </span>
             </div>
 
             {/* Date Tabs */}
