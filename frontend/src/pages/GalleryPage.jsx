@@ -372,8 +372,9 @@ const GalleryPage = ({ user }) => {
         setSelectedIds(new Set());
     };
 
-    // Download selected — Web Share API (mobile) with JSZip fallback (desktop)
-    // All downloads go through the backend proxy to avoid CORS / SSL issues with Drive URLs.
+    // Download selected — single file: saveAs, multiple: JSZip
+    // navigator.share() with files is NOT used because async blob fetching breaks
+    // the user-gesture requirement, causing NotAllowedError on all mobile browsers.
     const handleDownloadSelected = async () => {
         if (!selectedIds.size) return;
 
@@ -393,7 +394,7 @@ const GalleryPage = ({ user }) => {
         try {
             const token = await auth.currentUser?.getIdToken();
 
-            // Fetch all blobs via backend proxy in parallel
+            // Fetch all blobs via backend proxy
             const blobs = await Promise.all(
                 targets.map(async (item) => {
                     const res = await fetch(`${API}/api/v1/media/download/${item.file_id}`, {
@@ -402,29 +403,24 @@ const GalleryPage = ({ user }) => {
                     if (!res.ok) throw new Error(`Failed to fetch ${item.original_name}`);
                     const blob = await res.blob();
                     const filename = item.original_name || `file_${item.file_id}`;
-                    return new File([blob], filename, { type: blob.type });
+                    return { blob, filename };
                 })
             );
 
-            // Web Share API (iOS / Android native share sheet)
-            if (navigator.canShare && navigator.canShare({ files: blobs })) {
-                await navigator.share({
-                    files: blobs,
-                    title: '여행 사진',
-                });
+            if (blobs.length === 1) {
+                // Single file — direct saveAs (no ZIP overhead)
+                saveAs(blobs[0].blob, blobs[0].filename);
             } else {
-                // JSZip fallback (desktop / unsupported browser)
+                // Multiple files — ZIP archive
                 setProcessMsg('Compressing to ZIP...');
                 const zip = new JSZip();
-                blobs.forEach(file => zip.file(file.name, file));
+                blobs.forEach(({ blob, filename }) => zip.file(filename, blob));
                 const zipBlob = await zip.generateAsync({ type: 'blob' });
                 saveAs(zipBlob, 'album.zip');
             }
         } catch (e) {
-            if (e?.name !== 'AbortError') {
-                console.error('Download failed:', e);
-                showToast('Download failed. Please try again.');
-            }
+            console.error('Download failed:', e);
+            showToast('Download failed. Please try again.');
         } finally {
             setProcessing(false);
             setProcessMsg('');
