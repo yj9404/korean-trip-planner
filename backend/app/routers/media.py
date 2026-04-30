@@ -87,8 +87,13 @@ async def upload_media(
                 "media_type": meta["media_type"],
                 "size": meta["size"],
                 "date_label": meta["date_label"],
+                "group_id": meta["group_id"],
+                "drive_file_id": meta["drive_file_id"],
                 "image_url": meta["image_url"],
                 "drive_status": "done",
+                "created_at": meta["created_at"],
+                "uploader_id": meta["uploader_id"],
+                "uploader_name": meta["uploader_name"],
             })
         except ValueError as e:
             errors.append({"file": f.filename, "error": str(e)})

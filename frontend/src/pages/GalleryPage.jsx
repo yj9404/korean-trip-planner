@@ -90,10 +90,12 @@ const GalleryPage = ({ user }) => {
             if (res.ok) {
                 const data = await res.json();
                 setDates(data);
+                return data;
             }
         } catch (e) {
             console.error('Failed to load dates:', e);
         }
+        return null;
     }, []);
 
     // Load media
@@ -310,6 +312,11 @@ const GalleryPage = ({ user }) => {
             if (res.ok) {
                 setMedia(prev => prev.filter(m => m.file_id !== fileId));
                 if (lightboxItem?.file_id === fileId) closeLightbox();
+                const newDates = await loadDates();
+                if (newDates && selectedDate && !newDates.includes(selectedDate)) {
+                    setSelectedDate(null);
+                    loadMedia(null);
+                }
             }
         } catch (e) {
             console.error('Delete failed:', e);
@@ -352,6 +359,11 @@ const GalleryPage = ({ user }) => {
         setSelectedIds(new Set());
         setSelectMode(false);
         setDeleting(false);
+        const newDates = await loadDates();
+        if (newDates && selectedDate && !newDates.includes(selectedDate)) {
+            setSelectedDate(null);
+            loadMedia(null);
+        }
     };
 
     // Exit select mode
